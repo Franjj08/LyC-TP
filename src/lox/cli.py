@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 from lox.errors import DiagnosticReporter, LoxError, LoxRuntimeError
+from lox.syntax import Scanner
 
 
 class LoxCLI:
@@ -40,9 +41,10 @@ class LoxCLI:
                 break
 
     def run(self, source: str) -> None:
-        # En las próximas fases conectaremos Scanner -> Parser -> Resolver -> Interpreter
-        # Por ahora verificamos que el flujo y CLI respondan adecuadamente
-        pass
+        scanner = Scanner(source, diagnostics=self.diagnostics)
+        tokens = scanner.scan_tokens()
+        # En la Fase 2 pasaremos tokens al Parser
+        return tokens
 
 
 def main() -> None:
