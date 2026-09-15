@@ -32,6 +32,7 @@ def test_diagnostic_reporter_runtime_error():
 def test_cli_instantiation():
     cli = LoxCLI()
     assert cli.diagnostics is not None
+    assert not cli.scanner_mode
 
 
 def test_cli_run_file_non_existent(capsys):
@@ -53,12 +54,31 @@ def test_cli_run_file_existing(tmp_path):
     assert not cli.diagnostics.had_runtime_error
 
 
+def test_cli_scanner_mode_prints_tokens(capsys):
+    cli = LoxCLI(scanner_mode=True)
+    cli.run("var a = 10;")
+    stdout, _ = capsys.readouterr()
+    assert "Token(VAR" in stdout
+    assert "Token(IDENTIFIER" in stdout
+    assert "Token(NUMBER" in stdout
+    assert "Token(EOF" in stdout
+
+
+def test_cli_main_scanner_mode(tmp_path, capsys):
+    temp_file = tmp_path / "simple.lox"
+    temp_file.write_text("1 + 2;", encoding="utf-8")
+
+    with patch.object(sys, "argv", ["pylox", "scanner", str(temp_file)]):
+        main()
+    stdout, _ = capsys.readouterr()
+    assert "Token(NUMBER" in stdout
+    assert "Token(PLUS" in stdout
+
+
 def test_cli_main_too_many_arguments(capsys):
     with patch.object(sys, "argv", ["pylox", "uno.lox", "dos.lox"]):
         with pytest.raises(SystemExit) as exc_info:
             main()
         assert exc_info.value.code == 64
         _, stderr = capsys.readouterr()
-        assert "Uso: pylox [script.lox]" in stderr
-
-
+        assert "Uso: pylox" in stderr

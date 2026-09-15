@@ -5,8 +5,9 @@ from lox.syntax import Scanner
 
 
 class LoxCLI:
-    def __init__(self):
+    def __init__(self, scanner_mode: bool = False):
         self.diagnostics = DiagnosticReporter()
+        self.scanner_mode = scanner_mode
 
     def run_file(self, path: str) -> None:
         file_path = Path(path)
@@ -23,12 +24,18 @@ class LoxCLI:
             sys.exit(70)
 
     def run_prompt(self) -> None:
-        print("Lox Tree-Walk Interpreter (REPL)")
-        print("Escribe 'exit' o presiona Ctrl+D para salir.\n")
+        if self.scanner_mode:
+            print("Lox Scanner (Modo Tokens)")
+            print("Escribe código para ver sus tokens. Escribe 'exit' o presiona Ctrl+D para salir.\n")
+            prompt_str = "lox (scanner)> "
+        else:
+            print("Lox Tree-Walk Interpreter (REPL)")
+            print("Escribe 'exit' o presiona Ctrl+D para salir.\n")
+            prompt_str = "lox> "
 
         while True:
             try:
-                line = input("lox> ")
+                line = input(prompt_str)
                 if line.strip() == "exit":
                     break
                 if not line.strip():
@@ -40,19 +47,34 @@ class LoxCLI:
                 print("\nHasta luego!")
                 break
 
-    def run(self, source: str) -> None:
+    def run(self, source: str) -> list:
         scanner = Scanner(source, diagnostics=self.diagnostics)
         tokens = scanner.scan_tokens()
-        # En la Fase 2 pasaremos tokens al Parser
+
+        if self.scanner_mode:
+            for token in tokens:
+                print(token)
+
+        # En la Fase 2 pasaremos tokens al Parser si no estamos en scanner_mode
         return tokens
 
 
 def main() -> None:
-    cli = LoxCLI()
     args = sys.argv[1:]
+    scanner_mode = False
+
+    # Verificamos si se solicitó el modo scanner
+    if "scanner" in args:
+        scanner_mode = True
+        args.remove("scanner")
+    elif "--scanner" in args:
+        scanner_mode = True
+        args.remove("--scanner")
+
+    cli = LoxCLI(scanner_mode=scanner_mode)
 
     if len(args) > 1:
-        print("Uso: pylox [script.lox]", file=sys.stderr)
+        print("Uso: pylox [scanner] [script.lox]", file=sys.stderr)
         sys.exit(64)
     elif len(args) == 1:
         cli.run_file(args[0])
