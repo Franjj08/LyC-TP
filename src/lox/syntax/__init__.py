@@ -2,5 +2,28 @@
 
 from lox.syntax.token import Token, TokenType, KEYWORDS
 from lox.syntax.scanner import Scanner
+from lox.syntax.ast import (
+    Expr,
+    ExprVisitor,
+    BinaryExpr,
+    UnaryExpr,
+    GroupingExpr,
+    LiteralExpr,
+    AstPrinter,
+)
+from lox.syntax.parser import Parser
 
-__all__ = ["Token", "TokenType", "KEYWORDS", "Scanner"]
+__all__ = [
+    "Token",
+    "TokenType",
+    "KEYWORDS",
+    "Scanner",
+    "Expr",
+    "ExprVisitor",
+    "BinaryExpr",
+    "UnaryExpr",
+    "GroupingExpr",
+    "LiteralExpr",
+    "AstPrinter",
+    "Parser",
+]
