@@ -9,6 +9,7 @@ from lox.syntax.ast import (
     VariableExpr,
     AssignmentExpr,
     LogicalExpr,
+    CallExpr,
     Stmt,
     StmtVisitor,
     ExpressionStmt,
@@ -17,10 +18,13 @@ from lox.syntax.ast import (
     BlockStmt,
     IfStmt,
     WhileStmt,
+    FunDecl,
+    ReturnStmt,
 )
 from lox.syntax.token import Token, TokenType
-from lox.errors import DiagnosticReporter, LoxRuntimeError
+from lox.errors import DiagnosticReporter, LoxRuntimeError, LoxReturnException
 from lox.runtime.environment import Environment
+from lox.runtime.callable import LoxCallable, LoxFunction, ClockFunction
 
 
 class Interpreter(ExprVisitor, StmtVisitor):
@@ -30,6 +34,9 @@ class Interpreter(ExprVisitor, StmtVisitor):
         self.diagnostics = diagnostics
         self.globals: Environment = Environment()
         self.environment: Environment = self.globals
+
+        # Definir funciones nativas estándar
+        self.globals.define("clock", ClockFunction())
 
     def interpret(self, target: list[Stmt] | Stmt | Expr, print_result: Optional[bool] = None) -> Any:
         """Punto de entrada para ejecutar sentencias o evaluar expresiones.
@@ -49,6 +56,13 @@ class Interpreter(ExprVisitor, StmtVisitor):
                 if print_result:
                     print(self.stringify(value))
                 return value
+        except LoxReturnException as return_exc:
+            error = LoxRuntimeError("No se puede retornar desde código de nivel superior.")
+            if self.diagnostics:
+                self.diagnostics.report_runtime_error(error)
+            else:
+                raise error
+            return None
         except LoxRuntimeError as error:
             if self.diagnostics:
                 self.diagnostics.report_runtime_error(error)
@@ -113,6 +127,20 @@ class Interpreter(ExprVisitor, StmtVisitor):
         while self._is_truthy(self.evaluate(stmt.condition)):
             self.execute(stmt.body)
         return None
+
+    def visit_fun_decl(self, stmt: FunDecl) -> Any:
+        """Declara una función vinculando su cuerpo con el entorno léxico actual (closure)."""
+        function = LoxFunction(declaration=stmt, closure=self.environment)
+        self.environment.define(stmt.name.lexeme, function)
+        return None
+
+    def visit_return_stmt(self, stmt: ReturnStmt) -> Any:
+        """Desenrolla el stack mediante LoxReturnException con el valor devuelto."""
+        value = None
+        if stmt.value is not None:
+            value = self.evaluate(stmt.value)
+
+        raise LoxReturnException(value)
 
     # ---------- Nodos de Expresión (Expr) ---------- #
 
@@ -212,6 +240,29 @@ class Interpreter(ExprVisitor, StmtVisitor):
                 return left
 
         return self.evaluate(expr.right)
+
+    def visit_call_expr(self, expr: CallExpr) -> Any:
+        """Evalúa una llamada a función verificando aridad y condición de invocabilidad."""
+        callee = self.evaluate(expr.callee)
+
+        arguments: list[Any] = []
+        for argument in expr.arguments:
+            arguments.append(self.evaluate(argument))
+
+        if not isinstance(callee, LoxCallable):
+            raise LoxRuntimeError(
+                "Solo se pueden invocar funciones y clases.",
+                token=expr.paren,
+            )
+
+        function: LoxCallable = callee
+        if len(arguments) != function.arity():
+            raise LoxRuntimeError(
+                f"Se esperaban {function.arity()} argumentos pero se obtuvieron {len(arguments)}.",
+                token=expr.paren,
+            )
+
+        return function.call(self, arguments)
 
     def visit_variable_expr(self, expr: VariableExpr) -> Any:
         """Obtiene el valor de una variable desde el entorno actual."""

@@ -51,6 +51,10 @@ class ExprVisitor(ABC):
     def visit_logical_expr(self, expr: "LogicalExpr") -> Any:
         pass
 
+    @abstractmethod
+    def visit_call_expr(self, expr: "CallExpr") -> Any:
+        pass
+
 
 @dataclass(frozen=True)
 class BinaryExpr(Expr):
@@ -155,6 +159,22 @@ class LogicalExpr(Expr):
         return f"({self.operator.lexeme} {self.left} {self.right})"
 
 
+@dataclass(frozen=True)
+class CallExpr(Expr):
+    """Representa la invocación a una función o método: callee(argumentos)."""
+
+    callee: Expr
+    paren: Token
+    arguments: list[Expr]
+
+    def accept(self, visitor: ExprVisitor) -> Any:
+        return visitor.visit_call_expr(self)
+
+    def __repr__(self) -> str:
+        args_str = ", ".join(repr(a) for a in self.arguments)
+        return f"{self.callee}({args_str})"
+
+
 # =====================================================================
 # Sentencias (Stmt)
 # =====================================================================
@@ -194,6 +214,14 @@ class StmtVisitor(ABC):
 
     @abstractmethod
     def visit_while_stmt(self, stmt: "WhileStmt") -> Any:
+        pass
+
+    @abstractmethod
+    def visit_fun_decl(self, stmt: "FunDecl") -> Any:
+        pass
+
+    @abstractmethod
+    def visit_return_stmt(self, stmt: "ReturnStmt") -> Any:
         pass
 
 
@@ -261,6 +289,29 @@ class WhileStmt(Stmt):
         return visitor.visit_while_stmt(self)
 
 
+@dataclass(frozen=True)
+class FunDecl(Stmt):
+    """Declaración de función: fun nombre(param1, param2) { cuerpo }"""
+
+    name: Token
+    params: list[Token]
+    body: list[Stmt]
+
+    def accept(self, visitor: StmtVisitor) -> Any:
+        return visitor.visit_fun_decl(self)
+
+
+@dataclass(frozen=True)
+class ReturnStmt(Stmt):
+    """Sentencia de retorno de función: return expr; o return;"""
+
+    keyword: Token
+    value: Optional[Expr] = None
+
+    def accept(self, visitor: StmtVisitor) -> Any:
+        return visitor.visit_return_stmt(self)
+
+
 # =====================================================================
 # Impresión del AST (AstPrinter)
 # =====================================================================
@@ -298,6 +349,9 @@ class AstPrinter(ExprVisitor):
 
     def visit_logical_expr(self, expr: LogicalExpr) -> str:
         return self._parenthesize(expr.operator.lexeme, expr.left, expr.right)
+
+    def visit_call_expr(self, expr: CallExpr) -> str:
+        return self._parenthesize(expr.callee.accept(self), *expr.arguments)
 
     def _parenthesize(self, name: str, *exprs: Expr) -> str:
         parts = [name]

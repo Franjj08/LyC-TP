@@ -9,6 +9,7 @@ from lox.syntax.ast import (
     VariableExpr,
     AssignmentExpr,
     LogicalExpr,
+    CallExpr,
     Stmt,
     ExpressionStmt,
     PrintStmt,
@@ -16,6 +17,8 @@ from lox.syntax.ast import (
     BlockStmt,
     IfStmt,
     WhileStmt,
+    FunDecl,
+    ReturnStmt,
 )
 from lox.errors import DiagnosticReporter, LoxSyntaxError
 
@@ -55,14 +58,35 @@ class Parser:
     # ---------- Declaraciones y Sentencias ---------- #
 
     def _declaration(self) -> Optional[Stmt]:
-        """declaration -> varDeclaration | statement"""
+        """declaration -> funDeclaration | varDeclaration | statement"""
         try:
+            if self._match(TokenType.FUN):
+                return self._function("función")
             if self._match(TokenType.VAR):
                 return self._var_declaration()
             return self._statement()
         except LoxSyntaxError:
             self._synchronize()
             return None
+
+    def _function(self, kind: str) -> Stmt:
+        """function -> IDENTIFIER "(" parameters? ")" block"""
+        name = self._consume(TokenType.IDENTIFIER, f"Se esperaba el nombre de la {kind}.")
+        self._consume(TokenType.LEFT_PAREN, f"Se esperaba '(' después del nombre de la {kind}.")
+        parameters: list[Token] = []
+
+        if not self._check(TokenType.RIGHT_PAREN):
+            while True:
+                if len(parameters) >= 255:
+                    self._error(self._peek(), "No se pueden definir más de 255 parámetros.")
+                parameters.append(self._consume(TokenType.IDENTIFIER, "Se esperaba el nombre del parámetro."))
+                if not self._match(TokenType.COMMA):
+                    break
+
+        self._consume(TokenType.RIGHT_PAREN, "Se esperaba ')' después de los parámetros.")
+        self._consume(TokenType.LEFT_BRACE, f"Se esperaba '{{' antes del cuerpo de la {kind}.")
+        body = self._block()
+        return FunDecl(name=name, params=parameters, body=body)
 
     def _var_declaration(self) -> Stmt:
         """varDeclaration -> "var" IDENTIFIER ( "=" expression )? ";" """
@@ -76,18 +100,31 @@ class Parser:
         return VarDecl(name=name, initializer=initializer)
 
     def _statement(self) -> Stmt:
-        """statement -> forStmt | ifStmt | printStmt | whileStmt | block | exprStmt"""
+        """statement -> forStmt | ifStmt | printStmt | returnStmt | whileStmt | block | exprStmt"""
         if self._match(TokenType.FOR):
             return self._for_statement()
         if self._match(TokenType.IF):
             return self._if_statement()
         if self._match(TokenType.PRINT):
             return self._print_statement()
+        if self._match(TokenType.RETURN):
+            return self._return_statement()
         if self._match(TokenType.WHILE):
             return self._while_statement()
         if self._match(TokenType.LEFT_BRACE):
             return BlockStmt(statements=self._block())
         return self._expression_statement()
+
+    def _return_statement(self) -> Stmt:
+        """returnStmt -> "return" expression? ";" """
+        keyword = self._previous()
+        value: Optional[Expr] = None
+
+        if not self._check(TokenType.SEMICOLON):
+            value = self._expression()
+
+        self._consume(TokenType.SEMICOLON, "Se esperaba ';' después del valor de retorno.")
+        return ReturnStmt(keyword=keyword, value=value)
 
     def _if_statement(self) -> Stmt:
         """ifStmt -> "if" "(" expression ")" statement ( "else" statement )?"""
@@ -277,13 +314,40 @@ class Parser:
         return expr
 
     def _unary(self) -> Expr:
-        """unary -> ( "!" | "-" ) unary | primary"""
+        """unary -> ( "!" | "-" ) unary | call"""
         if self._match(TokenType.BANG, TokenType.MINUS):
             operator = self._previous()
             right = self._unary()
             return UnaryExpr(operator=operator, right=right)
 
-        return self._primary()
+        return self._call()
+
+    def _call(self) -> Expr:
+        """call -> primary ( "(" arguments? ")" )*"""
+        expr = self._primary()
+
+        while True:
+            if self._match(TokenType.LEFT_PAREN):
+                expr = self._finish_call(expr)
+            else:
+                break
+
+        return expr
+
+    def _finish_call(self, callee: Expr) -> Expr:
+        """arguments -> expression ( "," expression )*"""
+        arguments: list[Expr] = []
+
+        if not self._check(TokenType.RIGHT_PAREN):
+            while True:
+                if len(arguments) >= 255:
+                    self._error(self._peek(), "No se pueden pasar más de 255 argumentos.")
+                arguments.append(self._expression())
+                if not self._match(TokenType.COMMA):
+                    break
+
+        paren = self._consume(TokenType.RIGHT_PAREN, "Se esperaba ')' después de los argumentos.")
+        return CallExpr(callee=callee, paren=paren, arguments=arguments)
 
     def _primary(self) -> Expr:
         """primary -> NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" | IDENTIFIER"""

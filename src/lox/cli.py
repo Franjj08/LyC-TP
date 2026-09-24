@@ -10,6 +10,8 @@ from lox.syntax.ast import (
     BlockStmt,
     IfStmt,
     WhileStmt,
+    FunDecl,
+    ReturnStmt,
 )
 from lox.runtime import Interpreter
 
@@ -93,6 +95,12 @@ class LoxCLI:
                     print(f"(if {AstPrinter().print(stmt.condition)} ...)")
                 elif isinstance(stmt, WhileStmt):
                     print(f"(while {AstPrinter().print(stmt.condition)} ...)")
+                elif isinstance(stmt, FunDecl):
+                    params_str = " ".join(p.lexeme for p in stmt.params)
+                    print(f"(fun {stmt.name.lexeme} ({params_str}) ...)")
+                elif isinstance(stmt, ReturnStmt):
+                    val_str = f" {AstPrinter().print(stmt.value)}" if stmt.value else ""
+                    print(f"(return{val_str})")
             return statements
 
         # En REPL interactivo (o ejecución directa de una sola expresión), imprimir el valor de salida
