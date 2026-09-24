@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 import sys
-from typing import Optional
+from typing import Any, Optional
 
 
 class LoxError(Exception):
@@ -34,7 +34,17 @@ class LoxResolutionError(LoxError):
 
 class LoxRuntimeError(LoxError):
     """Error emitido durante la ejecución (Interpreter)."""
-    pass
+
+    def __init__(
+        self,
+        message: str,
+        token: Optional[Any] = None,
+        line: Optional[int] = None,
+    ):
+        token_line = getattr(token, "line", None) if token is not None else None
+        effective_line = token_line if token_line is not None else line
+        super().__init__(message, line=effective_line)
+        self.token = token
 
 
 class LoxReturnException(Exception):

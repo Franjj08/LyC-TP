@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 from lox.errors import DiagnosticReporter, LoxError, LoxRuntimeError
 from lox.syntax import Scanner, Parser, AstPrinter
+from lox.runtime import Interpreter
 
 
 class LoxCLI:
@@ -10,6 +11,7 @@ class LoxCLI:
         self.diagnostics = DiagnosticReporter()
         self.scanner_mode = scanner_mode
         self.ast_mode = ast_mode
+        self.interpreter = Interpreter(diagnostics=self.diagnostics)
 
     def run_file(self, path: str) -> None:
         file_path = Path(path)
@@ -48,7 +50,7 @@ class LoxCLI:
                     continue
                 self.run(line)
                 # En modo interactivo reseteamos el estado de error por línea
-                self.diagnostics.had_error = False
+                self.diagnostics.reset()
             except (EOFError, KeyboardInterrupt):
                 print("\nHasta luego!")
                 break
@@ -67,9 +69,12 @@ class LoxCLI:
 
         if self.ast_mode and expr is not None:
             print(AstPrinter().print(expr))
+            return expr
 
-        # En la Fase 3 pasaremos expr al Evaluador/Interpreter
-        return expr
+        if expr is not None:
+            return self.interpreter.interpret(expr)
+
+        return None
 
 
 def main() -> None:
