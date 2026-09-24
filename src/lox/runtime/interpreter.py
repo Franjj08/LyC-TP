@@ -6,27 +6,46 @@ from lox.syntax.ast import (
     UnaryExpr,
     GroupingExpr,
     LiteralExpr,
+    VariableExpr,
+    AssignmentExpr,
+    Stmt,
+    StmtVisitor,
+    ExpressionStmt,
+    PrintStmt,
+    VarDecl,
+    BlockStmt,
 )
 from lox.syntax.token import Token, TokenType
 from lox.errors import DiagnosticReporter, LoxRuntimeError
+from lox.runtime.environment import Environment
 
 
-class Interpreter(ExprVisitor):
-    """Evaluador de expresiones mediante recorrido del Árbol de Sintaxis Abstracta (AST)."""
+class Interpreter(ExprVisitor, StmtVisitor):
+    """Evaluador de sentencias y expresiones mediante recorrido del AST (Tree-Walk)."""
 
     def __init__(self, diagnostics: Optional[DiagnosticReporter] = None):
         self.diagnostics = diagnostics
+        self.globals: Environment = Environment()
+        self.environment: Environment = self.globals
 
-    def interpret(self, expr: Expr, print_result: bool = True) -> Any:
-        """Evalúa una expresión y opcionalmente imprime su representación canónica.
+    def interpret(self, target: list[Stmt] | Stmt | Expr, print_result: Optional[bool] = None) -> Any:
+        """Punto de entrada para ejecutar sentencias o evaluar expresiones.
 
         Captura errores de runtime y los reporta a través del DiagnosticReporter.
         """
         try:
-            value = self.evaluate(expr)
-            if print_result:
-                print(self.stringify(value))
-            return value
+            if isinstance(target, list):
+                last_value = None
+                for statement in target:
+                    last_value = self.execute(statement)
+                return last_value
+            elif isinstance(target, Stmt):
+                return self.execute(target)
+            else:
+                value = self.evaluate(target)
+                if print_result:
+                    print(self.stringify(value))
+                return value
         except LoxRuntimeError as error:
             if self.diagnostics:
                 self.diagnostics.report_runtime_error(error)
@@ -38,7 +57,47 @@ class Interpreter(ExprVisitor):
         """Evalúa un nodo de expresión ejecutando su método accept con este visitor."""
         return expr.accept(self)
 
-    # ---------- Nodos de Expresión ---------- #
+    def execute(self, stmt: Stmt) -> Any:
+        """Ejecuta un nodo de sentencia ejecutando su método accept con este visitor."""
+        return stmt.accept(self)
+
+    def execute_block(self, statements: list[Stmt], environment: Environment) -> None:
+        """Ejecuta una lista de sentencias dentro del contexto de un nuevo entorno de variables."""
+        previous = self.environment
+        try:
+            self.environment = environment
+            for statement in statements:
+                self.execute(statement)
+        finally:
+            self.environment = previous
+
+    # ---------- Nodos de Sentencia (Stmt) ---------- #
+
+    def visit_expression_stmt(self, stmt: ExpressionStmt) -> Any:
+        """Evalúa la expresión de la sentencia y retorna su valor."""
+        return self.evaluate(stmt.expression)
+
+    def visit_print_stmt(self, stmt: PrintStmt) -> Any:
+        """Evalúa la expresión e imprime su representación en consola."""
+        value = self.evaluate(stmt.expression)
+        print(self.stringify(value))
+        return None
+
+    def visit_var_decl(self, stmt: VarDecl) -> Any:
+        """Declara una variable en el entorno actual, inicializándola si corresponde."""
+        value = None
+        if stmt.initializer is not None:
+            value = self.evaluate(stmt.initializer)
+
+        self.environment.define(stmt.name.lexeme, value)
+        return None
+
+    def visit_block_stmt(self, stmt: BlockStmt) -> Any:
+        """Ejecuta un bloque delimitado por llaves en un nuevo ámbito léxico."""
+        self.execute_block(stmt.statements, Environment(enclosing=self.environment))
+        return None
+
+    # ---------- Nodos de Expresión (Expr) ---------- #
 
     def visit_literal_expr(self, expr: LiteralExpr) -> Any:
         """Retorna el valor literal directo."""
@@ -123,6 +182,16 @@ class Interpreter(ExprVisitor):
                     f"Operador binario no soportado: '{expr.operator.lexeme}'.",
                     token=expr.operator,
                 )
+
+    def visit_variable_expr(self, expr: VariableExpr) -> Any:
+        """Obtiene el valor de una variable desde el entorno actual."""
+        return self.environment.get(expr.name)
+
+    def visit_assignment_expr(self, expr: AssignmentExpr) -> Any:
+        """Evalúa el valor a asignar y actualiza la variable en el entorno."""
+        value = self.evaluate(expr.value)
+        self.environment.assign(expr.name, value)
+        return value
 
     # ---------- Semántica de Runtime ---------- #
 

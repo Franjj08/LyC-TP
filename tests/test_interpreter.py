@@ -14,7 +14,7 @@ def evaluate_source(source: str, interpreter: Interpreter | None = None) -> obje
     scanner = Scanner(source)
     tokens = scanner.scan_tokens()
     parser = Parser(tokens)
-    expr = parser.parse()
+    expr = parser.parse_expression()
     assert expr is not None, f"Fallo al parsear la expresión: {source}"
     interp = interpreter if interpreter is not None else Interpreter()
     return interp.evaluate(expr)
@@ -166,7 +166,7 @@ def test_interpreter_diagnostic_reporting():
 
     scanner = Scanner('1 / 0')
     tokens = scanner.scan_tokens()
-    expr = Parser(tokens).parse()
+    expr = Parser(tokens).parse_expression()
     assert expr is not None
 
     result = interp.interpret(expr)

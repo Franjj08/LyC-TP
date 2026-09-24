@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 from lox.errors import DiagnosticReporter, LoxError, LoxRuntimeError
 from lox.syntax import Scanner, Parser, AstPrinter
+from lox.syntax.ast import ExpressionStmt, PrintStmt, VarDecl, BlockStmt
 from lox.runtime import Interpreter
 
 
@@ -20,7 +21,7 @@ class LoxCLI:
             sys.exit(66)
 
         source = file_path.read_text(encoding="utf-8")
-        self.run(source)
+        self.run(source, is_repl=False)
 
         if self.diagnostics.had_error:
             sys.exit(65)
@@ -48,14 +49,14 @@ class LoxCLI:
                     break
                 if not line.strip():
                     continue
-                self.run(line)
+                self.run(line, is_repl=True)
                 # En modo interactivo reseteamos el estado de error por línea
                 self.diagnostics.reset()
             except (EOFError, KeyboardInterrupt):
                 print("\nHasta luego!")
                 break
 
-    def run(self, source: str) -> Any:
+    def run(self, source: str, is_repl: bool = True) -> Any:
         scanner = Scanner(source, diagnostics=self.diagnostics)
         tokens = scanner.scan_tokens()
 
@@ -65,16 +66,35 @@ class LoxCLI:
             return tokens
 
         parser = Parser(tokens, diagnostics=self.diagnostics)
-        expr = parser.parse()
+        statements = parser.parse()
 
-        if self.ast_mode and expr is not None:
-            print(AstPrinter().print(expr))
-            return expr
+        if self.diagnostics.had_error:
+            return None
 
-        if expr is not None:
-            return self.interpreter.interpret(expr)
+        if self.ast_mode:
+            for stmt in statements:
+                if isinstance(stmt, ExpressionStmt):
+                    print(AstPrinter().print(stmt.expression))
+                elif isinstance(stmt, PrintStmt):
+                    print(f"(print {AstPrinter().print(stmt.expression)})")
+                elif isinstance(stmt, VarDecl):
+                    init_str = f" = {AstPrinter().print(stmt.initializer)}" if stmt.initializer else ""
+                    print(f"(var {stmt.name.lexeme}{init_str})")
+                elif isinstance(stmt, BlockStmt):
+                    print("(block ...)")
+            return statements
 
-        return None
+        # En REPL interactivo (o ejecución directa de una sola expresión), imprimir el valor de salida
+        if is_repl and len(statements) == 1 and isinstance(statements[0], ExpressionStmt):
+            try:
+                val = self.interpreter.evaluate(statements[0].expression)
+                print(self.interpreter.stringify(val))
+                return val
+            except LoxRuntimeError as error:
+                self.diagnostics.report_runtime_error(error)
+                return None
+
+        return self.interpreter.interpret(statements)
 
 
 def main() -> None:

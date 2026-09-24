@@ -1,13 +1,18 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, TypeVar
+from typing import Any, Optional, TypeVar
 from lox.syntax.token import Token
 
 T = TypeVar("T")
 
 
+# =====================================================================
+# Expresiones (Expr)
+# =====================================================================
+
+
 class Expr(ABC):
-    """Clase base abstracta para todos los nodos del Árbol de Sintaxis Abstracta (AST)."""
+    """Clase base abstracta para todos los nodos de expresión del AST."""
 
     @abstractmethod
     def accept(self, visitor: "ExprVisitor[T]") -> T:
@@ -15,7 +20,7 @@ class Expr(ABC):
         pass
 
 
-class ExprVisitor(ABC, list[T] if False else object):
+class ExprVisitor(ABC):
     """Interfaz para visitar los distintos nodos de expresión."""
 
     @abstractmethod
@@ -32,6 +37,14 @@ class ExprVisitor(ABC, list[T] if False else object):
 
     @abstractmethod
     def visit_unary_expr(self, expr: "UnaryExpr") -> Any:
+        pass
+
+    @abstractmethod
+    def visit_variable_expr(self, expr: "VariableExpr") -> Any:
+        pass
+
+    @abstractmethod
+    def visit_assignment_expr(self, expr: "AssignmentExpr") -> Any:
         pass
 
 
@@ -96,6 +109,113 @@ class UnaryExpr(Expr):
         return f"({self.operator.lexeme} {self.right})"
 
 
+@dataclass(frozen=True)
+class VariableExpr(Expr):
+    """Representa el acceso al valor de una variable por su identificador."""
+
+    name: Token
+
+    def accept(self, visitor: ExprVisitor) -> Any:
+        return visitor.visit_variable_expr(self)
+
+    def __repr__(self) -> str:
+        return self.name.lexeme
+
+
+@dataclass(frozen=True)
+class AssignmentExpr(Expr):
+    """Representa la asignación de un valor a una variable: nombre = expresión."""
+
+    name: Token
+    value: Expr
+
+    def accept(self, visitor: ExprVisitor) -> Any:
+        return visitor.visit_assignment_expr(self)
+
+    def __repr__(self) -> str:
+        return f"(= {self.name.lexeme} {self.value})"
+
+
+# =====================================================================
+# Sentencias (Stmt)
+# =====================================================================
+
+
+class Stmt(ABC):
+    """Clase base abstracta para todos los nodos de sentencia del AST."""
+
+    @abstractmethod
+    def accept(self, visitor: "StmtVisitor[T]") -> T:
+        """Permite recorrer la sentencia mediante el patrón Visitor."""
+        pass
+
+
+class StmtVisitor(ABC):
+    """Interfaz para visitar los distintos nodos de sentencia."""
+
+    @abstractmethod
+    def visit_expression_stmt(self, stmt: "ExpressionStmt") -> Any:
+        pass
+
+    @abstractmethod
+    def visit_print_stmt(self, stmt: "PrintStmt") -> Any:
+        pass
+
+    @abstractmethod
+    def visit_var_decl(self, stmt: "VarDecl") -> Any:
+        pass
+
+    @abstractmethod
+    def visit_block_stmt(self, stmt: "BlockStmt") -> Any:
+        pass
+
+
+@dataclass(frozen=True)
+class ExpressionStmt(Stmt):
+    """Sentencia consistente en una única expresión evaluada por efecto de lado: expr;"""
+
+    expression: Expr
+
+    def accept(self, visitor: StmtVisitor) -> Any:
+        return visitor.visit_expression_stmt(self)
+
+
+@dataclass(frozen=True)
+class PrintStmt(Stmt):
+    """Sentencia de impresión por consola: print expr;"""
+
+    expression: Expr
+
+    def accept(self, visitor: StmtVisitor) -> Any:
+        return visitor.visit_print_stmt(self)
+
+
+@dataclass(frozen=True)
+class VarDecl(Stmt):
+    """Declaración de variable: var nombre = expr; o var nombre;"""
+
+    name: Token
+    initializer: Optional[Expr] = None
+
+    def accept(self, visitor: StmtVisitor) -> Any:
+        return visitor.visit_var_decl(self)
+
+
+@dataclass(frozen=True)
+class BlockStmt(Stmt):
+    """Bloque de sentencias delimitado por llaves: { stmt1; stmt2; ... }"""
+
+    statements: list[Stmt]
+
+    def accept(self, visitor: StmtVisitor) -> Any:
+        return visitor.visit_block_stmt(self)
+
+
+# =====================================================================
+# Impresión del AST (AstPrinter)
+# =====================================================================
+
+
 class AstPrinter(ExprVisitor):
     """Imprime el AST de expresiones en formato de S-Expressions tipo Lisp."""
 
@@ -119,6 +239,12 @@ class AstPrinter(ExprVisitor):
 
     def visit_unary_expr(self, expr: UnaryExpr) -> str:
         return self._parenthesize(expr.operator.lexeme, expr.right)
+
+    def visit_variable_expr(self, expr: VariableExpr) -> str:
+        return expr.name.lexeme
+
+    def visit_assignment_expr(self, expr: AssignmentExpr) -> str:
+        return self._parenthesize(f"= {expr.name.lexeme}", expr.value)
 
     def _parenthesize(self, name: str, *exprs: Expr) -> str:
         parts = [name]

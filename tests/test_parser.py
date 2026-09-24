@@ -16,7 +16,7 @@ def parse_expression(source: str, diagnostics: DiagnosticReporter | None = None)
     scanner = Scanner(source, diagnostics=diagnostics)
     tokens = scanner.scan_tokens()
     parser = Parser(tokens, diagnostics=diagnostics)
-    return parser.parse()
+    return parser.parse_expression()
 
 
 def test_literal_expressions():

@@ -6,47 +6,128 @@ from lox.syntax.ast import (
     UnaryExpr,
     GroupingExpr,
     LiteralExpr,
+    VariableExpr,
+    AssignmentExpr,
+    Stmt,
+    ExpressionStmt,
+    PrintStmt,
+    VarDecl,
+    BlockStmt,
 )
 from lox.errors import DiagnosticReporter, LoxSyntaxError
 
 
 class Parser:
-    """Parser por Descenso Recursivo para expresiones del lenguaje Lox."""
+    """Parser por Descenso Recursivo para sentencias y expresiones de Lox."""
 
     def __init__(self, tokens: list[Token], diagnostics: Optional[DiagnosticReporter] = None):
         self.tokens = tokens
         self.diagnostics = diagnostics
         self.current: int = 0
 
-    def parse(self) -> Optional[Expr]:
-        """Parsea una expresión completa. Retorna None si ocurrió un error sintáctico."""
+    def parse(self) -> list[Stmt]:
+        """Parsea una secuencia de declaraciones y sentencias del programa."""
+        statements: list[Stmt] = []
+        while not self._is_at_end():
+            decl = self._declaration()
+            if decl is not None:
+                statements.append(decl)
+        return statements
+
+    def parse_expression(self) -> Optional[Expr]:
+        """Parsea una única expresión aislada (utilizado en tests y evaluación directa)."""
         try:
             if self._is_at_end():
                 return None
-
-            # Permitimos opcionalmente 'print <expr>' para compatibilidad antes de la Fase 4
-            if self._match(TokenType.PRINT):
-                expr = self._expression()
-            else:
-                expr = self._expression()
-
-            # Permitimos punto y coma opcional al final de la expresión
+            expr = self._expression()
             if self._match(TokenType.SEMICOLON):
                 pass
-
             if not self._is_at_end():
                 raise self._error(self._peek(), "Token inesperado después de la expresión.")
-
             return expr
         except LoxSyntaxError:
             self._synchronize()
             return None
 
+    # ---------- Declaraciones y Sentencias ---------- #
+
+    def _declaration(self) -> Optional[Stmt]:
+        """declaration -> varDeclaration | statement"""
+        try:
+            if self._match(TokenType.VAR):
+                return self._var_declaration()
+            return self._statement()
+        except LoxSyntaxError:
+            self._synchronize()
+            return None
+
+    def _var_declaration(self) -> Stmt:
+        """varDeclaration -> "var" IDENTIFIER ( "=" expression )? ";" """
+        name = self._consume(TokenType.IDENTIFIER, "Se esperaba el nombre de la variable.")
+        initializer: Optional[Expr] = None
+
+        if self._match(TokenType.EQUAL):
+            initializer = self._expression()
+
+        self._consume(TokenType.SEMICOLON, "Se esperaba ';' después de la declaración de variable.")
+        return VarDecl(name=name, initializer=initializer)
+
+    def _statement(self) -> Stmt:
+        """statement -> printStmt | block | exprStmt"""
+        if self._match(TokenType.PRINT):
+            return self._print_statement()
+        if self._match(TokenType.LEFT_BRACE):
+            return BlockStmt(statements=self._block())
+        return self._expression_statement()
+
+    def _print_statement(self) -> Stmt:
+        """printStmt -> "print" expression ";" """
+        value = self._expression()
+        self._consume(TokenType.SEMICOLON, "Se esperaba ';' después del valor a imprimir.")
+        return PrintStmt(expression=value)
+
+    def _block(self) -> list[Stmt]:
+        """block -> "{" declaration* "}" """
+        statements: list[Stmt] = []
+
+        while not self._check(TokenType.RIGHT_BRACE) and not self._is_at_end():
+            decl = self._declaration()
+            if decl is not None:
+                statements.append(decl)
+
+        self._consume(TokenType.RIGHT_BRACE, "Se esperaba '}' después del bloque.")
+        return statements
+
+    def _expression_statement(self) -> Stmt:
+        """exprStmt -> expression ";" """
+        expr = self._expression()
+        if not self._check(TokenType.SEMICOLON) and self._is_at_end():
+            # Permitimos omitir ';' al final del input en modo interactivo/expresión única
+            return ExpressionStmt(expression=expr)
+        self._consume(TokenType.SEMICOLON, "Se esperaba ';' después de la expresión.")
+        return ExpressionStmt(expression=expr)
+
     # ---------- Reglas de Producción de Expresiones ---------- #
 
     def _expression(self) -> Expr:
-        """expression -> equality"""
-        return self._equality()
+        """expression -> assignment"""
+        return self._assignment()
+
+    def _assignment(self) -> Expr:
+        """assignment -> IDENTIFIER "=" assignment | equality"""
+        expr = self._equality()
+
+        if self._match(TokenType.EQUAL):
+            equals = self._previous()
+            value = self._assignment()
+
+            if isinstance(expr, VariableExpr):
+                name = expr.name
+                return AssignmentExpr(name=name, value=value)
+
+            self._error(equals, "Objetivo de asignación inválido.")
+
+        return expr
 
     def _equality(self) -> Expr:
         """equality -> comparison ( ( "!=" | "==" ) comparison )*"""
@@ -107,7 +188,7 @@ class Parser:
         return self._primary()
 
     def _primary(self) -> Expr:
-        """primary -> NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" """
+        """primary -> NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" | IDENTIFIER"""
         if self._match(TokenType.FALSE):
             return LiteralExpr(False)
         if self._match(TokenType.TRUE):
@@ -117,6 +198,9 @@ class Parser:
 
         if self._match(TokenType.NUMBER, TokenType.STRING):
             return LiteralExpr(self._previous().literal)
+
+        if self._match(TokenType.IDENTIFIER):
+            return VariableExpr(name=self._previous())
 
         if self._match(TokenType.LEFT_PAREN):
             expr = self._expression()
