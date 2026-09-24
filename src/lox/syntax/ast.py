@@ -47,6 +47,10 @@ class ExprVisitor(ABC):
     def visit_assignment_expr(self, expr: "AssignmentExpr") -> Any:
         pass
 
+    @abstractmethod
+    def visit_logical_expr(self, expr: "LogicalExpr") -> Any:
+        pass
+
 
 @dataclass(frozen=True)
 class BinaryExpr(Expr):
@@ -136,6 +140,21 @@ class AssignmentExpr(Expr):
         return f"(= {self.name.lexeme} {self.value})"
 
 
+@dataclass(frozen=True)
+class LogicalExpr(Expr):
+    """Representa una operación lógica con cortocircuito: izquierda (and|or) derecha."""
+
+    left: Expr
+    operator: Token
+    right: Expr
+
+    def accept(self, visitor: ExprVisitor) -> Any:
+        return visitor.visit_logical_expr(self)
+
+    def __repr__(self) -> str:
+        return f"({self.operator.lexeme} {self.left} {self.right})"
+
+
 # =====================================================================
 # Sentencias (Stmt)
 # =====================================================================
@@ -167,6 +186,14 @@ class StmtVisitor(ABC):
 
     @abstractmethod
     def visit_block_stmt(self, stmt: "BlockStmt") -> Any:
+        pass
+
+    @abstractmethod
+    def visit_if_stmt(self, stmt: "IfStmt") -> Any:
+        pass
+
+    @abstractmethod
+    def visit_while_stmt(self, stmt: "WhileStmt") -> Any:
         pass
 
 
@@ -211,6 +238,29 @@ class BlockStmt(Stmt):
         return visitor.visit_block_stmt(self)
 
 
+@dataclass(frozen=True)
+class IfStmt(Stmt):
+    """Sentencia condicional: if (condición) sentencia [else sentencia]"""
+
+    condition: Expr
+    then_branch: Stmt
+    else_branch: Optional[Stmt] = None
+
+    def accept(self, visitor: StmtVisitor) -> Any:
+        return visitor.visit_if_stmt(self)
+
+
+@dataclass(frozen=True)
+class WhileStmt(Stmt):
+    """Sentencia de bucle mientras: while (condición) cuerpo"""
+
+    condition: Expr
+    body: Stmt
+
+    def accept(self, visitor: StmtVisitor) -> Any:
+        return visitor.visit_while_stmt(self)
+
+
 # =====================================================================
 # Impresión del AST (AstPrinter)
 # =====================================================================
@@ -245,6 +295,9 @@ class AstPrinter(ExprVisitor):
 
     def visit_assignment_expr(self, expr: AssignmentExpr) -> str:
         return self._parenthesize(f"= {expr.name.lexeme}", expr.value)
+
+    def visit_logical_expr(self, expr: LogicalExpr) -> str:
+        return self._parenthesize(expr.operator.lexeme, expr.left, expr.right)
 
     def _parenthesize(self, name: str, *exprs: Expr) -> str:
         parts = [name]

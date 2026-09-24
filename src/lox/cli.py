@@ -3,7 +3,14 @@ from pathlib import Path
 from typing import Any
 from lox.errors import DiagnosticReporter, LoxError, LoxRuntimeError
 from lox.syntax import Scanner, Parser, AstPrinter
-from lox.syntax.ast import ExpressionStmt, PrintStmt, VarDecl, BlockStmt
+from lox.syntax.ast import (
+    ExpressionStmt,
+    PrintStmt,
+    VarDecl,
+    BlockStmt,
+    IfStmt,
+    WhileStmt,
+)
 from lox.runtime import Interpreter
 
 
@@ -82,6 +89,10 @@ class LoxCLI:
                     print(f"(var {stmt.name.lexeme}{init_str})")
                 elif isinstance(stmt, BlockStmt):
                     print("(block ...)")
+                elif isinstance(stmt, IfStmt):
+                    print(f"(if {AstPrinter().print(stmt.condition)} ...)")
+                elif isinstance(stmt, WhileStmt):
+                    print(f"(while {AstPrinter().print(stmt.condition)} ...)")
             return statements
 
         # En REPL interactivo (o ejecución directa de una sola expresión), imprimir el valor de salida

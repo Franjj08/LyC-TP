@@ -8,11 +8,14 @@ from lox.syntax.ast import (
     LiteralExpr,
     VariableExpr,
     AssignmentExpr,
+    LogicalExpr,
     Stmt,
     ExpressionStmt,
     PrintStmt,
     VarDecl,
     BlockStmt,
+    IfStmt,
+    WhileStmt,
 )
 from lox.errors import DiagnosticReporter, LoxSyntaxError
 
@@ -73,12 +76,85 @@ class Parser:
         return VarDecl(name=name, initializer=initializer)
 
     def _statement(self) -> Stmt:
-        """statement -> printStmt | block | exprStmt"""
+        """statement -> forStmt | ifStmt | printStmt | whileStmt | block | exprStmt"""
+        if self._match(TokenType.FOR):
+            return self._for_statement()
+        if self._match(TokenType.IF):
+            return self._if_statement()
         if self._match(TokenType.PRINT):
             return self._print_statement()
+        if self._match(TokenType.WHILE):
+            return self._while_statement()
         if self._match(TokenType.LEFT_BRACE):
             return BlockStmt(statements=self._block())
         return self._expression_statement()
+
+    def _if_statement(self) -> Stmt:
+        """ifStmt -> "if" "(" expression ")" statement ( "else" statement )?"""
+        self._consume(TokenType.LEFT_PAREN, "Se esperaba '(' después de 'if'.")
+        condition = self._expression()
+        self._consume(TokenType.RIGHT_PAREN, "Se esperaba ')' después de la condición del 'if'.")
+
+        then_branch = self._statement()
+        else_branch: Optional[Stmt] = None
+        if self._match(TokenType.ELSE):
+            else_branch = self._statement()
+
+        return IfStmt(condition=condition, then_branch=then_branch, else_branch=else_branch)
+
+    def _while_statement(self) -> Stmt:
+        """whileStmt -> "while" "(" expression ")" statement"""
+        self._consume(TokenType.LEFT_PAREN, "Se esperaba '(' después de 'while'.")
+        condition = self._expression()
+        self._consume(TokenType.RIGHT_PAREN, "Se esperaba ')' después de la condición del 'while'.")
+        body = self._statement()
+        return WhileStmt(condition=condition, body=body)
+
+    def _for_statement(self) -> Stmt:
+        """forStmt -> "for" "(" ( varDecl | exprStmt | ";" ) expression? ";" expression? ")" statement
+
+        Desazucarado sintáctico hacia WhileStmt envuelto en un BlockStmt.
+        """
+        self._consume(TokenType.LEFT_PAREN, "Se esperaba '(' después de 'for'.")
+
+        # 1. Cláusula de inicialización
+        initializer: Optional[Stmt] = None
+        if self._match(TokenType.SEMICOLON):
+            initializer = None
+        elif self._match(TokenType.VAR):
+            initializer = self._var_declaration()
+        else:
+            initializer = self._expression_statement()
+
+        # 2. Cláusula de condición
+        condition: Optional[Expr] = None
+        if not self._check(TokenType.SEMICOLON):
+            condition = self._expression()
+        self._consume(TokenType.SEMICOLON, "Se esperaba ';' después de la condición del bucle 'for'.")
+
+        # 3. Cláusula de incremento
+        increment: Optional[Expr] = None
+        if not self._check(TokenType.RIGHT_PAREN):
+            increment = self._expression()
+        self._consume(TokenType.RIGHT_PAREN, "Se esperaba ')' después de las cláusulas del bucle 'for'.")
+
+        # 4. Cuerpo del bucle
+        body = self._statement()
+
+        # Desazucarado: ejecutar incremento al final de cada iteración
+        if increment is not None:
+            body = BlockStmt(statements=[body, ExpressionStmt(expression=increment)])
+
+        # Si no hay condición explícita, se asume 'true' (bucle infinito)
+        if condition is None:
+            condition = LiteralExpr(True)
+        body = WhileStmt(condition=condition, body=body)
+
+        # Envolver con el inicializador en un nuevo ámbito léxico si existe
+        if initializer is not None:
+            body = BlockStmt(statements=[initializer, body])
+
+        return body
 
     def _print_statement(self) -> Stmt:
         """printStmt -> "print" expression ";" """
@@ -114,8 +190,8 @@ class Parser:
         return self._assignment()
 
     def _assignment(self) -> Expr:
-        """assignment -> IDENTIFIER "=" assignment | equality"""
-        expr = self._equality()
+        """assignment -> IDENTIFIER "=" assignment | logic_or"""
+        expr = self._or()
 
         if self._match(TokenType.EQUAL):
             equals = self._previous()
@@ -126,6 +202,28 @@ class Parser:
                 return AssignmentExpr(name=name, value=value)
 
             self._error(equals, "Objetivo de asignación inválido.")
+
+        return expr
+
+    def _or(self) -> Expr:
+        """logic_or -> logic_and ( "or" logic_and )*"""
+        expr = self._and()
+
+        while self._match(TokenType.OR):
+            operator = self._previous()
+            right = self._and()
+            expr = LogicalExpr(left=expr, operator=operator, right=right)
+
+        return expr
+
+    def _and(self) -> Expr:
+        """logic_and -> equality ( "and" equality )*"""
+        expr = self._equality()
+
+        while self._match(TokenType.AND):
+            operator = self._previous()
+            right = self._equality()
+            expr = LogicalExpr(left=expr, operator=operator, right=right)
 
         return expr
 

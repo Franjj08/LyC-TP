@@ -8,12 +8,15 @@ from lox.syntax.ast import (
     LiteralExpr,
     VariableExpr,
     AssignmentExpr,
+    LogicalExpr,
     Stmt,
     StmtVisitor,
     ExpressionStmt,
     PrintStmt,
     VarDecl,
     BlockStmt,
+    IfStmt,
+    WhileStmt,
 )
 from lox.syntax.token import Token, TokenType
 from lox.errors import DiagnosticReporter, LoxRuntimeError
@@ -95,6 +98,20 @@ class Interpreter(ExprVisitor, StmtVisitor):
     def visit_block_stmt(self, stmt: BlockStmt) -> Any:
         """Ejecuta un bloque delimitado por llaves en un nuevo ámbito léxico."""
         self.execute_block(stmt.statements, Environment(enclosing=self.environment))
+        return None
+
+    def visit_if_stmt(self, stmt: IfStmt) -> Any:
+        """Ejecuta condicionalmente la rama then o else según la veracidad de la condición."""
+        if self._is_truthy(self.evaluate(stmt.condition)):
+            return self.execute(stmt.then_branch)
+        elif stmt.else_branch is not None:
+            return self.execute(stmt.else_branch)
+        return None
+
+    def visit_while_stmt(self, stmt: WhileStmt) -> Any:
+        """Ejecuta repetidamente el cuerpo del bucle mientras la condición sea verdadera."""
+        while self._is_truthy(self.evaluate(stmt.condition)):
+            self.execute(stmt.body)
         return None
 
     # ---------- Nodos de Expresión (Expr) ---------- #
@@ -182,6 +199,19 @@ class Interpreter(ExprVisitor, StmtVisitor):
                     f"Operador binario no soportado: '{expr.operator.lexeme}'.",
                     token=expr.operator,
                 )
+
+    def visit_logical_expr(self, expr: LogicalExpr) -> Any:
+        """Evalúa expresiones lógicas con cortocircuito ('and' y 'or'). Retorna el operando real."""
+        left = self.evaluate(expr.left)
+
+        if expr.operator.token_type == TokenType.OR:
+            if self._is_truthy(left):
+                return left
+        else:  # TokenType.AND
+            if not self._is_truthy(left):
+                return left
+
+        return self.evaluate(expr.right)
 
     def visit_variable_expr(self, expr: VariableExpr) -> Any:
         """Obtiene el valor de una variable desde el entorno actual."""
