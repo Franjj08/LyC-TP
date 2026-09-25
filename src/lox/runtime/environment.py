@@ -6,7 +6,8 @@ from lox.errors import LoxRuntimeError
 class Environment:
     """Tabla de símbolos que asocia nombres de variables con sus valores en tiempo de ejecución.
 
-    Soporta entornos anidados mediante un enlace léxico a su entorno envolvente (enclosing).
+    Soporta entornos anidados mediante un enlace léxico a su entorno envolvente (enclosing)
+    y acceso directo a distancias resueltas estáticamente.
     """
 
     def __init__(self, enclosing: Optional["Environment"] = None):
@@ -38,3 +39,19 @@ class Environment:
             return
 
         raise LoxRuntimeError(f"Variable no definida '{name.lexeme}'.", token=name)
+
+    def ancestor(self, distance: int) -> "Environment":
+        """Retorna el entorno antecesor situado a exactamente 'distance' saltos léxicos hacia arriba."""
+        environment = self
+        for _ in range(distance):
+            assert environment.enclosing is not None, "El entorno envolvente no puede ser nulo en la distancia resuelta."
+            environment = environment.enclosing
+        return environment
+
+    def get_at(self, distance: int, name: str) -> Any:
+        """Obtiene el valor de una variable en el entorno resuelto estáticamente."""
+        return self.ancestor(distance).values.get(name)
+
+    def assign_at(self, distance: int, name: Token, value: Any) -> None:
+        """Asigna un valor a una variable en el entorno resuelto estáticamente."""
+        self.ancestor(distance).values[name.lexeme] = value

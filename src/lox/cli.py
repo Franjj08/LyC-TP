@@ -14,6 +14,7 @@ from lox.syntax.ast import (
     ReturnStmt,
 )
 from lox.runtime import Interpreter
+from lox.semantics import Resolver
 
 
 class LoxCLI:
@@ -102,6 +103,13 @@ class LoxCLI:
                     val_str = f" {AstPrinter().print(stmt.value)}" if stmt.value else ""
                     print(f"(return{val_str})")
             return statements
+
+        # Análisis Semántico (Resolución estática de variables)
+        resolver = Resolver(self.interpreter, diagnostics=self.diagnostics)
+        resolver.resolve(statements)
+
+        if self.diagnostics.had_error:
+            return None
 
         # En REPL interactivo (o ejecución directa de una sola expresión), imprimir el valor de salida
         if is_repl and len(statements) == 1 and isinstance(statements[0], ExpressionStmt):

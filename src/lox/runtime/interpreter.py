@@ -34,9 +34,15 @@ class Interpreter(ExprVisitor, StmtVisitor):
         self.diagnostics = diagnostics
         self.globals: Environment = Environment()
         self.environment: Environment = self.globals
+        # Mapeo de identidad de nodo AST (id(expr)) a su profundidad estática
+        self.locals: dict[int, int] = {}
 
         # Definir funciones nativas estándar
         self.globals.define("clock", ClockFunction())
+
+    def resolve(self, expr: Expr, depth: int) -> None:
+        """Almacena la distancia léxica resuelta por el Resolver para la expresión dada."""
+        self.locals[id(expr)] = depth
 
     def interpret(self, target: list[Stmt] | Stmt | Expr, print_result: Optional[bool] = None) -> Any:
         """Punto de entrada para ejecutar sentencias o evaluar expresiones.
@@ -56,7 +62,7 @@ class Interpreter(ExprVisitor, StmtVisitor):
                 if print_result:
                     print(self.stringify(value))
                 return value
-        except LoxReturnException as return_exc:
+        except LoxReturnException:
             error = LoxRuntimeError("No se puede retornar desde código de nivel superior.")
             if self.diagnostics:
                 self.diagnostics.report_runtime_error(error)
@@ -265,13 +271,23 @@ class Interpreter(ExprVisitor, StmtVisitor):
         return function.call(self, arguments)
 
     def visit_variable_expr(self, expr: VariableExpr) -> Any:
-        """Obtiene el valor de una variable desde el entorno actual."""
-        return self.environment.get(expr.name)
+        """Obtiene el valor de una variable utilizando la distancia léxica si fue resuelta localmente."""
+        return self._look_up_variable(expr.name, expr)
+
+    def _look_up_variable(self, name: Token, expr: Expr) -> Any:
+        distance = self.locals.get(id(expr))
+        if distance is not None:
+            return self.environment.get_at(distance, name.lexeme)
+        return self.globals.get(name)
 
     def visit_assignment_expr(self, expr: AssignmentExpr) -> Any:
-        """Evalúa el valor a asignar y actualiza la variable en el entorno."""
+        """Evalúa el valor a asignar y actualiza la variable en la distancia léxica correspondiente."""
         value = self.evaluate(expr.value)
-        self.environment.assign(expr.name, value)
+        distance = self.locals.get(id(expr))
+        if distance is not None:
+            self.environment.assign_at(distance, expr.name, value)
+        else:
+            self.globals.assign(expr.name, value)
         return value
 
     # ---------- Semántica de Runtime ---------- #

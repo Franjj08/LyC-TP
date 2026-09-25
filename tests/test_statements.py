@@ -4,6 +4,7 @@ from lox.syntax.parser import Parser
 from lox.errors import DiagnosticReporter, LoxRuntimeError
 from lox.runtime.environment import Environment
 from lox.runtime.interpreter import Interpreter
+from lox.semantics.resolver import Resolver
 from lox.cli import LoxCLI
 
 
@@ -14,6 +15,8 @@ def run_source(source: str, interpreter: Interpreter | None = None) -> None:
     parser = Parser(tokens)
     statements = parser.parse()
     interp = interpreter if interpreter is not None else Interpreter()
+    resolver = Resolver(interp)
+    resolver.resolve(statements)
     interp.interpret(statements)
 
 
