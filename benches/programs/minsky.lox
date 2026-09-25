@@ -1,0 +1,38 @@
+fun minsky_even(n) {
+    var r0 = n;
+    var pc = 0;
+    var halt = false;
+
+    while (true and !halt) {
+        if (pc == 0) {
+            if (r0 == 0) {
+                pc = 2;
+            } else {
+                r0 = r0 - 1;
+                pc = 1;
+            }
+        } else if (pc == 1) {
+            if (r0 == 0) {
+                pc = 3;
+            } else {
+                r0 = r0 - 1;
+                pc = 0;
+            }
+        } else if (pc == 2) {
+            r0 = r0 + 1;
+            pc = 3;
+        } else if (pc == 3) {
+            halt = true;
+        }
+    }
+
+    return r0;
+}
+
+var evens = 0;
+for (var i = 0; i < 1500; i = i + 1) {
+    if (minsky_even(i) == 1) {
+        evens = evens + 1;
+    }
+}
+print evens;
