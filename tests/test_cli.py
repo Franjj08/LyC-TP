@@ -82,3 +82,36 @@ def test_cli_main_too_many_arguments(capsys):
         assert exc_info.value.code == 64
         _, stderr = capsys.readouterr()
         assert "Uso: pylox" in stderr
+
+
+def test_cli_detects_incomplete_multiline_input():
+    assert LoxCLI._needs_more_input("for (var i = 0; i < 3; i = i + 1) {")
+    assert LoxCLI._needs_more_input('print "texto con { llave";\n{')
+    assert not LoxCLI._needs_more_input(
+        "for (var i = 0; i < 3; i = i + 1) {\n"
+        "    print i;\n"
+        "}"
+    )
+
+
+def test_cli_multiline_for_loop(capsys):
+    cli = LoxCLI()
+    user_lines = [
+        "for (var i = 0; i < 3; i = i + 1) {",
+        "    print i;",
+        "}",
+        "exit",
+    ]
+
+    with patch("builtins.input", side_effect=user_lines) as mock_input:
+        cli.run_prompt()
+
+    stdout, stderr = capsys.readouterr()
+    assert stderr == ""
+    assert "0\n1\n2\n" in stdout
+    assert [call.args[0] for call in mock_input.call_args_list] == [
+        "lox> ",
+        "... ",
+        "... ",
+        "lox> ",
+    ]

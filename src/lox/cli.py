@@ -49,22 +49,83 @@ class LoxCLI:
             prompt_str = "lox (ast)> "
         else:
             print("Lox Tree-Walk Interpreter (REPL)")
-            print("Escribe 'exit' o presiona Ctrl+D para salir.\n")
+            print("Escribe 'exit' o presiona Ctrl+D para salir. Los bloques pueden ocupar varias líneas.\n")
             prompt_str = "lox> "
+
+        source_lines: list[str] = []
+        current_prompt = prompt_str
 
         while True:
             try:
-                line = input(prompt_str)
-                if line.strip() == "exit":
+                line = input(current_prompt)
+
+                if not source_lines and line.strip() == "exit":
                     break
-                if not line.strip():
+                if not source_lines and not line.strip():
                     continue
-                self.run(line, is_repl=True)
-                # En modo interactivo reseteamos el estado de error por línea
+
+                source_lines.append(line)
+                source = "\n".join(source_lines)
+
+                if self._needs_more_input(source):
+                    current_prompt = "... "
+                    continue
+
+                self.run(source, is_repl=True)
+                source_lines.clear()
+                current_prompt = prompt_str
+                # En modo interactivo reseteamos el estado de error por entrada completa.
                 self.diagnostics.reset()
             except (EOFError, KeyboardInterrupt):
                 print("\nHasta luego!")
                 break
+
+    @staticmethod
+    def _needs_more_input(source: str) -> bool:
+        """Indica si una entrada del REPL tiene delimitadores o cadenas sin cerrar.
+
+        Ignora delimitadores que aparezcan dentro de cadenas o comentarios de línea,
+        para que bloques como funciones, condicionales y bucles puedan escribirse en
+        varias líneas sin enviar fragmentos incompletos al parser.
+        """
+        paren_depth = 0
+        brace_depth = 0
+        quote: str | None = None
+        escaped = False
+        index = 0
+
+        while index < len(source):
+            char = source[index]
+
+            if quote is not None:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == quote:
+                    quote = None
+                index += 1
+                continue
+
+            if char in ('"', "'"):
+                quote = char
+            elif char == "/" and index + 1 < len(source) and source[index + 1] == "/":
+                newline = source.find("\n", index + 2)
+                if newline == -1:
+                    break
+                index = newline
+            elif char == "(":
+                paren_depth += 1
+            elif char == ")":
+                paren_depth -= 1
+            elif char == "{":
+                brace_depth += 1
+            elif char == "}":
+                brace_depth -= 1
+
+            index += 1
+
+        return quote is not None or paren_depth > 0 or brace_depth > 0
 
     def run(self, source: str, is_repl: bool = True) -> Any:
         scanner = Scanner(source, diagnostics=self.diagnostics)
