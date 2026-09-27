@@ -44,7 +44,14 @@ var resultado = 2 + 3;
 en una secuencia equivalente a:
 
 ```text
-VAR IDENTIFIER<resultado> EQUAL NUMBER<2> PLUS NUMBER<3> SEMICOLON EOF
+Token(VAR, lexeme='var', literal=None, line=1)
+Token(IDENTIFIER, lexeme='resultado', literal=None, line=1)
+Token(EQUAL, lexeme='=', literal=None, line=1)
+Token(NUMBER, lexeme='2', literal=2.0, line=1)
+Token(PLUS, lexeme='+', literal=None, line=1)
+Token(NUMBER, lexeme='3', literal=3.0, line=1)
+Token(SEMICOLON, lexeme=';', literal=None, line=1)
+Token(EOF, lexeme='', literal=None, line=1)
 ```
 
 Cada token, definido en [`src/lox/syntax/token.py`](src/lox/syntax/token.py), conserva su tipo, lexema, valor literal, línea.
@@ -194,18 +201,6 @@ uv run pylox --ast programa.lox
 
 ### 1. Tokens
 
-Un token representa una unidad del programa. Por ejemplo, el código:
-
-```lox
-var resultado = 10 + 2;
-```
-
-se convierte conceptualmente en:
-
-```text
-VAR IDENTIFIER<resultado> EQUAL NUMBER<10> PLUS NUMBER<2> SEMICOLON EOF
-```
-
 #### Cátedra
 
 La cátedra implementa `Token` como una clase mutable tradicional:
@@ -254,13 +249,9 @@ class Token:
 [línea 3] Error en ')': Se esperaba una expresión.
 ```
 
-El TP también reserva `DOT`, `CLASS`, `SUPER` y `THIS`. Que existan esos tipos de token no significa que clases y herencia estén implementadas; solamente deja preparada la capa léxica para una extensión futura.
-
-La diferencia es principalmente de representación y diagnóstico. Ambos scanners entregan al parser la misma información esencial: tipo, texto original y valor literal.
-
 ### 2. Transformación de `for` en `while`
 
-Ninguna implementación ejecuta directamente una sentencia `for`. El parser la transforma en nodos que el intérprete ya conoce. Esta técnica se denomina *desazucarado sintáctico*.
+Ninguna implementación ejecuta directamente una sentencia `for`. El parser la transforma en nodos que el intérprete ya conoce. 
 
 El programa:
 
@@ -289,53 +280,6 @@ La transformación tiene tres pasos:
 2. La condición y el cuerpo se convierten en un `WhileStmt`.
 3. El inicializador y el `while` se envuelven en un `BlockStmt`.
 
-#### Cátedra
-
-```python
-if increment is not None:
-    body = BlockStmt([body, ExpressionStmt(increment)])
-
-if condition is None:
-    condition = LiteralExpr(True)
-
-body = WhileStmt(condition, body)
-
-if initializer is not None:
-    body = BlockStmt([initializer, body])
-
-return body
-```
-
-#### TP
-
-```python
-if increment is not None:
-    body = BlockStmt(
-        statements=[body, ExpressionStmt(expression=increment)]
-    )
-
-if condition is None:
-    condition = LiteralExpr(True)
-
-body = WhileStmt(condition=condition, body=body)
-
-if initializer is not None:
-    body = BlockStmt(statements=[initializer, body])
-
-return body
-```
-
-Aquí casi no hay diferencia algorítmica. El TP usa argumentos nombrados porque sus nodos son dataclasses, mientras que la cátedra usa argumentos posicionales. El resultado del parser es el mismo tipo de árbol.
-
-El `BlockStmt` exterior es importante: limita el alcance de `i`. Después del `for`, esta lectura debe fallar:
-
-```lox
-for (var i = 0; i < 3; i = i + 1) {
-    print i;
-}
-
-print i; // i ya no existe.
-```
 
 ### 3. Manejo de errores
 
@@ -453,15 +397,6 @@ El AST representa la estructura del programa sin conservar detalles innecesarios
 2 + 3 * 4
 ```
 
-ambas versiones construyen conceptualmente:
-
-```text
-       +
-      / \
-     2   *
-        / \
-       3   4
-```
 
 #### Cátedra
 
@@ -694,7 +629,6 @@ value = self.evaluate(statement.expression)
 print(value)
 ```
 
-El Visitor también tiene impacto en el benchmark. En un bucle grande, cada condición, operación y asignación recorre nodos repetidamente. La llamada directa `accept() → visit_*()` evita el trabajo de resolución de `singledispatchmethod`. Esta es una explicación probable de parte de la diferencia de rendimiento observada, aunque para atribuir porcentajes exactos sería necesario perfilar ambos intérpretes por función.
 
 ## Benchmark: bucle grande
 
@@ -710,28 +644,17 @@ print sum;
 
 La salida de ambas implementaciones se valida numéricamente como `1499994` antes de aceptar cada medición.
 
-### Metodología
-
-- Medición end-to-end con `time.perf_counter()`.
-- Incluye inicio de Python, scanner, parser, resolver y ejecución.
-- Una ejecución de calentamiento por implementación.
-- Siete ejecuciones medidas por implementación.
-- Mismo archivo y Python 3.12.14 para ambas versiones.
-- Equipo: MacBook Pro con Apple M5 Pro de 18 núcleos y 48 GB de memoria.
-- Sistema: macOS 26.6.2, arquitectura arm64.
 
 ### Resultados
 
-| Implementación | Mediana | Promedio | Mínimo | Máximo |
-|---|---:|---:|---:|---:|
-| TP | **1,2685 s** | 1,2696 s | 1,2581 s | 1,2848 s |
-| Cátedra | 6,2798 s | 6,2673 s | 6,2212 s | 6,2966 s |
+| Implementación | Tiempo |
+|---|---:|
+| TP | **1,2685 s** | 
+| Cátedra | 6,2798 s |
 
-En esta prueba, el TP fue **4,95 veces más rápido** según la mediana.
+Una explicación probable es el costo de `singledispatchmethod` en la implementación de la cátedra. Dentro de un bucle, cada condición, lectura, asignación y operación atraviesa repetidamente ese mecanismo de despacho. El TP realiza llamadas directas desde `accept()` hacia los métodos Visitor. 
 
-Una explicación probable es el costo de `singledispatchmethod` en la implementación de la cátedra. Dentro de un bucle, cada condición, lectura, asignación y operación atraviesa repetidamente ese mecanismo de despacho. El TP realiza llamadas directas desde `accept()` hacia los métodos Visitor. Esta interpretación es consistente con el diseño de ambos programas, pero el benchmark no incluye un perfil por función y, por sí solo, no demuestra cuánto aporta cada diferencia interna.
 
-Los resultados dependen del equipo, la carga del sistema y la versión de Python. El script reproducible está en [`benches/compare_loop.py`](benches/compare_loop.py).
 
 Ejecutarlo desde `LyC-TP`:
 
@@ -773,6 +696,3 @@ La implementación pasa:
 | Todo OK |
 ```
 
-## Alcance
-
-Esta versión corresponde al intérprete Tree-Walk de la entrega parcial. Todavía no implementa compilación a bytecode, máquina virtual, clases ni herencia.
