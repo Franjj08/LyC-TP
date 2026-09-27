@@ -47,7 +47,7 @@ en una secuencia equivalente a:
 VAR IDENTIFIER<resultado> EQUAL NUMBER<2> PLUS NUMBER<3> SEMICOLON EOF
 ```
 
-Cada token, definido en [`src/lox/syntax/token.py`](src/lox/syntax/token.py), conserva su tipo, lexema, valor literal, línea y columna.
+Cada token, definido en [`src/lox/syntax/token.py`](src/lox/syntax/token.py), conserva su tipo, lexema, valor literal, línea.
 
 ### 2. Parser y AST
 
@@ -246,13 +246,12 @@ class Token:
     lexeme: str
     literal: Any = None
     line: int = 1
-    column: int = 1
 ```
 
-`frozen=True` impide modificar accidentalmente un token después de crearlo. Además, se guarda la columna. Esto permite producir un diagnóstico como:
+`frozen=True` impide modificar accidentalmente un token después de crearlo. Se conserva la línea para ubicar los errores en el código fuente. Esto permite producir un diagnóstico como:
 
 ```text
-[línea 3] Error en ')' (columna 18): Se esperaba una expresión.
+[línea 3] Error en ')': Se esperaba una expresión.
 ```
 
 El TP también reserva `DOT`, `CLASS`, `SUPER` y `THIS`. Que existan esos tipos de token no significa que clases y herencia estén implementadas; solamente deja preparada la capa léxica para una extensión futura.
@@ -444,7 +443,7 @@ if self.diagnostics.had_runtime_error:
     sys.exit(70)
 ```
 
-La diferencia práctica es que la cátedra presenta un mecanismo más directo, basado en lanzar y capturar excepciones. El TP separa errores léxicos, sintácticos, semánticos y de ejecución, incluye línea y columna e intenta recuperar el análisis cuando es posible.
+La diferencia práctica es que la cátedra presenta un mecanismo más directo, basado en lanzar y capturar excepciones. El TP separa errores léxicos, sintácticos, semánticos y de ejecución, incluye línea e intenta recuperar el análisis cuando es posible.
 
 ### 4. AST
 

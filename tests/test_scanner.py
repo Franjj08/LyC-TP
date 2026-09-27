@@ -152,21 +152,21 @@ def test_all_keywords():
         assert tokens[0].lexeme == keyword
 
 
-def test_line_and_column_tracking():
+def test_line_tracking():
     source = "var a = 1;\nvar b = 2;"
     scanner = Scanner(source)
     tokens = scanner.scan_tokens()
 
     # Line 1
-    assert tokens[0].lexeme == "var" and tokens[0].line == 1 and tokens[0].column == 1
-    assert tokens[1].lexeme == "a" and tokens[1].line == 1 and tokens[1].column == 5
-    assert tokens[2].lexeme == "=" and tokens[2].line == 1 and tokens[2].column == 7
-    assert tokens[3].lexeme == "1" and tokens[3].line == 1 and tokens[3].column == 9
-    assert tokens[4].lexeme == ";" and tokens[4].line == 1 and tokens[4].column == 10
+    assert tokens[0].lexeme == "var" and tokens[0].line == 1
+    assert tokens[1].lexeme == "a" and tokens[1].line == 1
+    assert tokens[2].lexeme == "=" and tokens[2].line == 1
+    assert tokens[3].lexeme == "1" and tokens[3].line == 1
+    assert tokens[4].lexeme == ";" and tokens[4].line == 1
 
     # Line 2
-    assert tokens[5].lexeme == "var" and tokens[5].line == 2 and tokens[5].column == 1
-    assert tokens[6].lexeme == "b" and tokens[6].line == 2 and tokens[6].column == 5
+    assert tokens[5].lexeme == "var" and tokens[5].line == 2
+    assert tokens[6].lexeme == "b" and tokens[6].line == 2
 
 
 def test_lexical_errors_unexpected_character():

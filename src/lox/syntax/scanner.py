@@ -7,7 +7,7 @@ class Scanner:
     """Analizador léxico (Scanner) para el lenguaje Lox.
     
     Convierte el código fuente en una secuencia ordenada de Tokens,
-    rastreando información de línea y columna y recolectando diagnósticos de error.
+    rastreando información de línea y recolectando diagnósticos de error.
     """
 
     def __init__(self, source: str, diagnostics: Optional[DiagnosticReporter] = None):
@@ -18,14 +18,11 @@ class Scanner:
         self.start: int = 0
         self.current: int = 0
         self.line: int = 1
-        self.column: int = 1
-        self.start_column: int = 1
 
     def scan_tokens(self) -> list[Token]:
         """Escanea todo el código fuente y retorna la lista de tokens finalizada con EOF."""
         while not self._is_at_end():
             self.start = self.current
-            self.start_column = self.column
             self.scan_token()
 
         # Añadimos el token EOF al final
@@ -35,7 +32,6 @@ class Scanner:
                 lexeme="",
                 literal=None,
                 line=self.line,
-                column=self.column,
             )
         )
         return self.tokens
@@ -97,7 +93,6 @@ class Scanner:
                 pass
             case "\n":
                 self.line += 1
-                self.column = 1
 
             # Literales de texto (comillas dobles o simples)
             case '"' | "'":
@@ -126,7 +121,6 @@ class Scanner:
 
             if ch == "\n":
                 self.line += 1
-                self.column = 0  # _advance incrementará a 1
 
             if ch == "\\":
                 # Carácter de escape
@@ -198,7 +192,6 @@ class Scanner:
     def _advance(self) -> str:
         char = self.source[self.current]
         self.current += 1
-        self.column += 1
         return char
 
     def _match(self, expected: str) -> bool:
@@ -207,7 +200,6 @@ class Scanner:
         if self.source[self.current] != expected:
             return False
         self.current += 1
-        self.column += 1
         return True
 
     def _peek(self) -> str:
@@ -228,10 +220,9 @@ class Scanner:
                 lexeme=lexeme,
                 literal=literal,
                 line=self.line,
-                column=self.start_column,
             )
         )
 
     def _error(self, message: str) -> None:
         if self.diagnostics:
-            self.diagnostics.report_error(self.line, f" en columna {self.start_column}", message)
+            self.diagnostics.report_error(self.line, "", message)

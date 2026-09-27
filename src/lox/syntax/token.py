@@ -77,13 +77,12 @@ KEYWORDS: dict[str, TokenType] = {
 
 @dataclass(frozen=True)
 class Token:
-    """Representa una unidad léxica atómica (Token) con información de tipo y posición."""
+    """Representa una unidad léxica atómica (Token) con información de tipo y línea."""
 
     token_type: TokenType
     lexeme: str
     literal: Any = None
     line: int = 1
-    column: int = 1
 
     def __repr__(self) -> str:
         if self.token_type == TokenType.IDENTIFIER:
@@ -93,4 +92,4 @@ class Token:
         return self.token_type.name
 
     def __str__(self) -> str:
-        return f"Token({self.token_type.name}, lexeme={self.lexeme!r}, literal={self.literal!r}, line={self.line}, col={self.column})"
+        return f"Token({self.token_type.name}, lexeme={self.lexeme!r}, literal={self.literal!r}, line={self.line})"

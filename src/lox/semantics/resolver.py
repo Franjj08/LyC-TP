@@ -99,7 +99,7 @@ class Resolver(ExprVisitor, StmtVisitor):
         if token.token_type == TokenType.EOF:
             where = " al final del archivo"
         else:
-            where = f" en '{token.lexeme}' (columna {token.column})"
+            where = f" en '{token.lexeme}'"
 
         if self.diagnostics:
             self.diagnostics.report_error(token.line, where, message)
