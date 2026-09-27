@@ -1,141 +1,779 @@
-# Intérprete Tree-Walk de Lox (Entrega Parcial)
+# Intérprete Tree-Walk de Lox
 
-Trabajo Práctico para la materia **Lenguajes y Compiladores (75.14 / 95.57) — FIUBA**.
+Trabajo Práctico de **Lenguajes y Compiladores  — FIUBA**.
 
-Este repositorio contiene la implementación incremental de un intérprete *Tree-Walk* para el lenguaje de programación **Lox**, siguiendo y adaptando los conceptos de diseño de compiladores e intérpretes (basado en *Crafting Interpreters*, Robert Nystrom) con arquitectura modular en Python 3.12 y empaquetado con `uv`.
+El proyecto implementa en Python 3.12 un intérprete *Tree-Walk* para el lenguaje Lox. Recibe código fuente, reconoce sus tokens, construye un Árbol de Sintaxis Abstracta (AST), resuelve los ámbitos léxicos y finalmente ejecuta el árbol.
 
----
+## Qué hace el TP
 
-## 🏛️ Arquitectura del Sistema
+El intérprete soporta:
 
-El pipeline de ejecución se divide en cuatro fases principales desacopladas:
+- Números, cadenas, booleanos y `nil`.
+- Operadores aritméticos, de comparación y lógicos.
+- Declaración, lectura y asignación de variables.
+- Bloques con ámbitos anidados y *shadowing*.
+- Sentencias `if`, `else`, `while` y `for`.
+- Funciones, parámetros, retornos y recursión.
+- Funciones anidadas y *closures*.
+- Resolución estática de variables locales.
+- Ejecución de archivos y consola interactiva REPL.
+- Modos para inspeccionar tokens y el AST.
+
+
+## Pipeline de ejecución
 
 ```mermaid
-graph LR
-    Source[Código Fuente .lox] --> Scanner[Scanner / Lexer]
-    Scanner --> Tokens[Tokens]
-    Tokens --> Parser[Parser Descenso Recursivo]
-    Parser --> AST[AST Nodos Expr / Stmt]
-    AST --> Resolver[Resolver Análisis Semántico]
-    Resolver --> Scopes[Resolución de Scopes y Distancias]
-    Scopes --> Interpreter[Interpreter Tree-Walk]
-    Interpreter --> Runtime[Entorno / Consola / Errores]
+flowchart LR
+    Source["Código fuente .lox"] --> Scanner["Scanner"]
+    Scanner --> Tokens["Tokens"]
+    Tokens --> Parser["Parser"]
+    Parser --> AST["AST"]
+    AST --> Resolver["Resolver"]
+    Resolver --> Interpreter["Interpreter"]
+    Interpreter --> Output["Salida o error"]
 ```
 
-1. **Análisis Léxico (`lox.syntax.scanner`)**:
-   - Transforma el flujo de texto en una secuencia de objetos `Token`.
-   - Soporta operadores aritméticos (`+`, `-`, `*`, `/`, `%`), de comparación (`==`, `!=`, `<`, `<=`, `>`, `>=`), lógicos (`!`, `and`, `or`), literales numéricos, cadenas con secuencias de escape y palabras reservadas.
-   - Rastreo de número de línea y columna para diagnósticos precisos.
+### 1. Scanner
 
-2. **Árbol de Sintaxis Abstracta y Análisis Sintáctico (`lox.syntax.ast` y `lox.syntax.parser`)**:
-   - Nodos fuertemente tipados organizados en jerarquías de `Expr` y `Stmt`.
-   - Parser por descenso recursivo que modela precedencias y asociatividad estándar.
-   - Desazucarado sintáctico del bucle `for` hacia sentencias `while` contenidas en bloques léxicos.
-   - Recuperación ante errores sintácticos mediante *Panic Mode Recovery* sincronizando en delimitadores de sentencias.
+[`src/lox/syntax/scanner.py`](src/lox/syntax/scanner.py) recorre el texto carácter por carácter. Convierte:
 
-3. **Análisis Semántico y Resolución de Ámbitos (`lox.semantics.resolver`)**:
-   - Pase previo a la ejecución que visita el AST calculando la distancia léxica estática (`depth`) de variables locales y vinculaciones a funciones.
-   - Soluciona de raíz el *Closure Bug* garantizando que las funciones capturen exactamente el ámbito léxico donde fueron definidas.
-   - Validación temprana de errores semánticos:
-     - Detección de lectura de variables locales en su propio inicializador (`var a = a;`).
-     - Detección de declaraciones duplicadas dentro de un mismo bloque local.
-     - Detección de sentencias `return` en el nivel superior fuera de cualquier función.
+```lox
+var resultado = 2 + 3;
+```
 
-4. **Ejecución en Tiempo de Ejecución (`lox.runtime`)**:
-   - `Interpreter`: Implementa los patrones Visitor de `ExprVisitor` y `StmtVisitor`.
-   - `Environment`: Tabla de símbolos jerárquica con enlace al entorno envolvente (`enclosing`) y soporte de acceso directo por distancia (`get_at` / `assign_at`).
-   - Semántica estricta de *truthiness* de Lox: únicamente `nil` y `false` son falsos; `0` y `""` son verdaderos.
-   - Control de flujo por excepciones para desenrollar la pila en llamadas y sentencias `return` (`LoxReturnException`).
-   - Invocables de usuario (`LoxFunction`) y funciones nativas del sistema (`ClockFunction` para `clock()`).
+en una secuencia equivalente a:
 
----
+```text
+VAR IDENTIFIER<resultado> EQUAL NUMBER<2> PLUS NUMBER<3> SEMICOLON EOF
+```
 
-## 🚀 Requisitos e Instalación
+Cada token, definido en [`src/lox/syntax/token.py`](src/lox/syntax/token.py), conserva su tipo, lexema, valor literal, línea y columna.
 
-Se requiere Python 3.12 o superior y [`uv`](https://docs.astral.sh/uv/) como gestor de entorno:
+### 2. Parser y AST
 
-```sh
-# Clonar el repositorio
-git clone <url-del-repo>
+[`src/lox/syntax/parser.py`](src/lox/syntax/parser.py) usa descenso recursivo para convertir los tokens en nodos de [`src/lox/syntax/ast.py`](src/lox/syntax/ast.py).
+
+La expresión:
+
+```lox
+2 + 3 * 4
+```
+
+se representa como:
+
+```text
+       +
+      / \
+     2   *
+        / \
+       3   4
+```
+
+La estructura respeta la precedencia: primero se calcula `3 * 4` y después se suma `2`.
+
+El `for` se desazucara en el parser. Este código:
+
+```lox
+for (var i = 0; i < 3; i = i + 1) {
+    print i;
+}
+```
+
+se convierte internamente en una estructura equivalente a:
+
+```lox
+{
+    var i = 0;
+    while (i < 3) {
+        print i;
+        i = i + 1;
+    }
+}
+```
+
+El intérprete no necesita un nodo especial para `for`.
+
+### 3. Resolver
+
+[`src/lox/semantics/resolver.py`](src/lox/semantics/resolver.py) realiza un recorrido previo del AST. Para cada referencia local calcula cuántos entornos debe subir el intérprete hasta llegar a la declaración correspondiente.
+
+```text
+Entorno actual       profundidad 0
+      │
+      ▼
+Entorno exterior     profundidad 1
+      │
+      ▼
+Entorno exterior     profundidad 2
+```
+
+
+
+### 4. Interpreter y runtime
+
+[`src/lox/runtime/interpreter.py`](src/lox/runtime/interpreter.py) recorre el AST y ejecuta cada nodo. [`src/lox/runtime/environment.py`](src/lox/runtime/environment.py) almacena variables y conecta cada ámbito con su entorno exterior.
+
+Las funciones están implementadas en [`src/lox/runtime/callable.py`](src/lox/runtime/callable.py). Cada `LoxFunction` guarda:
+
+```python
+self.declaration  # Parámetros y cuerpo de la función.
+self.closure      # Entorno donde se declaró.
+```
+
+`return` usa una excepción interna para abandonar inmediatamente el cuerpo de la función:
+
+```python
+raise LoxReturnException(value)
+```
+
+La excepción es parte del control de flujo interno y es capturada por `LoxFunction`.
+
+## Estructura del proyecto
+
+```text
+LyC-TP/
+├── src/lox/
+│   ├── syntax/
+│   │   ├── token.py
+│   │   ├── scanner.py
+│   │   ├── ast.py
+│   │   └── parser.py
+│   ├── semantics/
+│   │   └── resolver.py
+│   ├── runtime/
+│   │   ├── environment.py
+│   │   ├── callable.py
+│   │   └── interpreter.py
+│   ├── errors.py
+│   └── cli.py
+├── tests/
+├── benches/
+└── pyproject.toml
+```
+
+## Instalación y uso
+
+Requisitos:
+
+- Python 3.12 o superior.
+- [`uv`](https://docs.astral.sh/uv/).
+
+Instalar las dependencias:
+
+```bash
 cd LyC-TP
-
-# Instalar dependencias del proyecto (incluye pytest)
 uv sync
 ```
 
----
+Ejecutar un archivo:
 
-## 💻 Uso de la Interfaz CLI (`pylox`)
-
-El punto de entrada principal es `pylox` (o `python3 -m lox.cli`):
-
-### 1. Modo Archivo (Script)
-Ejecuta un programa completo desde un archivo `.lox`:
-```sh
-uv run pylox script.lox
+```bash
+uv run pylox programa.lox
 ```
 
-### 2. Modo Interactivo (REPL)
-Inicia una consola interactiva línea a línea que evalúa tanto sentencias como expresiones individuales:
-```sh
+Abrir el REPL:
+
+```bash
 uv run pylox
 ```
 
-### 3. Modos de Diagnóstico e Inspección
-- **Modo Scanner (Tokens):**
-  ```sh
-  uv run pylox --scanner script.lox
-  ```
-- **Modo Parser (Árbol Sintáctico AST en formato S-Expressions):**
-  ```sh
-  uv run pylox --ast script.lox
-  ```
 
----
+Inspeccionar los tokens:
 
-## 🧪 Validación y Tests
-
-### Tests Unitarios Propios
-El proyecto cuenta con una amplia suite de pruebas unitarias cubriendo casos límite, precedencias, errores léxicos, sintácticos, semánticos y de runtime:
-
-```sh
-uv run pytest
+```bash
+uv run pylox --scanner programa.lox
 ```
-> Resultado actual: **88 tests pasando**.
 
-### Suite de Pruebas Oficial de la Cátedra (`real-tests`)
-Para ejecutar la suite de compatibilidad provista por los docentes:
+Inspeccionar el AST:
 
-```sh
+```bash
+uv run pylox --ast programa.lox
+```
+
+## Comparación con la implementación de la cátedra
+
+### 1. Tokens
+
+Un token representa una unidad del programa. Por ejemplo, el código:
+
+```lox
+var resultado = 10 + 2;
+```
+
+se convierte conceptualmente en:
+
+```text
+VAR IDENTIFIER<resultado> EQUAL NUMBER<10> PLUS NUMBER<2> SEMICOLON EOF
+```
+
+#### Cátedra
+
+La cátedra implementa `Token` como una clase mutable tradicional:
+
+```python
+TokenLiteralType = float | str | bool | None
+
+class Token:
+    def __init__(
+        self,
+        token_type: TokenType,
+        *,
+        lexeme: str,
+        literal: TokenLiteralType,
+        line: int,
+    ):
+        self.token_type = token_type
+        self.lexeme = lexeme
+        self.literal = literal
+        self.line = line
+```
+
+El token conserva cuatro datos:
+
+- `token_type`: significado sintáctico, como `NUMBER` o `VAR`.
+- `lexeme`: caracteres originales del código.
+- `literal`: valor ya convertido, por ejemplo `10.0`.
+- `line`: línea donde apareció.
+
+#### TP
+
+El TP utiliza una dataclass inmutable:
+
+```python
+@dataclass(frozen=True)
+class Token:
+    token_type: TokenType
+    lexeme: str
+    literal: Any = None
+    line: int = 1
+    column: int = 1
+```
+
+`frozen=True` impide modificar accidentalmente un token después de crearlo. Además, se guarda la columna. Esto permite producir un diagnóstico como:
+
+```text
+[línea 3] Error en ')' (columna 18): Se esperaba una expresión.
+```
+
+El TP también reserva `DOT`, `CLASS`, `SUPER` y `THIS`. Que existan esos tipos de token no significa que clases y herencia estén implementadas; solamente deja preparada la capa léxica para una extensión futura.
+
+La diferencia es principalmente de representación y diagnóstico. Ambos scanners entregan al parser la misma información esencial: tipo, texto original y valor literal.
+
+### 2. Transformación de `for` en `while`
+
+Ninguna implementación ejecuta directamente una sentencia `for`. El parser la transforma en nodos que el intérprete ya conoce. Esta técnica se denomina *desazucarado sintáctico*.
+
+El programa:
+
+```lox
+for (var i = 0; i < 3; i = i + 1) {
+    print i;
+}
+```
+
+se convierte en una estructura equivalente a:
+
+```lox
+{
+    var i = 0;
+
+    while (i < 3) {
+        print i;
+        i = i + 1;
+    }
+}
+```
+
+La transformación tiene tres pasos:
+
+1. El incremento se agrega al final del cuerpo.
+2. La condición y el cuerpo se convierten en un `WhileStmt`.
+3. El inicializador y el `while` se envuelven en un `BlockStmt`.
+
+#### Cátedra
+
+```python
+if increment is not None:
+    body = BlockStmt([body, ExpressionStmt(increment)])
+
+if condition is None:
+    condition = LiteralExpr(True)
+
+body = WhileStmt(condition, body)
+
+if initializer is not None:
+    body = BlockStmt([initializer, body])
+
+return body
+```
+
+#### TP
+
+```python
+if increment is not None:
+    body = BlockStmt(
+        statements=[body, ExpressionStmt(expression=increment)]
+    )
+
+if condition is None:
+    condition = LiteralExpr(True)
+
+body = WhileStmt(condition=condition, body=body)
+
+if initializer is not None:
+    body = BlockStmt(statements=[initializer, body])
+
+return body
+```
+
+Aquí casi no hay diferencia algorítmica. El TP usa argumentos nombrados porque sus nodos son dataclasses, mientras que la cátedra usa argumentos posicionales. El resultado del parser es el mismo tipo de árbol.
+
+El `BlockStmt` exterior es importante: limita el alcance de `i`. Después del `for`, esta lectura debe fallar:
+
+```lox
+for (var i = 0; i < 3; i = i + 1) {
+    print i;
+}
+
+print i; // i ya no existe.
+```
+
+### 3. Manejo de errores
+
+Las implementaciones difieren tanto en los tipos de error como en la posibilidad de continuar analizando el programa.
+
+#### Cátedra
+
+La cátedra usa principalmente excepciones estándar:
+
+```python
+raise Exception("Unterminated string")
+raise SyntaxError("Expected expression")
+raise NameError("Variable already exists")
+raise RuntimeError("Undefined variable")
+```
+
+La CLI delimita cada etapa con `try/except`:
+
+```python
+try:
+    tokens = scanner.scan()
+except Exception as error:
+    print(f"Scanning Error: {error}")
+    return
+
+try:
+    statements = parser.parse()
+except Exception as error:
+    print(f"Parsing Error: {error}")
+    return
+```
+
+Cuando aparece un error, esa ejecución se detiene. La opción `--debug` permite mostrar el traceback de Python, lo cual resulta útil durante el desarrollo del intérprete.
+
+#### TP
+
+El TP define tipos específicos según la etapa:
+
+```python
+class LoxError(Exception):
+    pass
+
+class LoxLexicalError(LoxError):
+    pass
+
+class LoxSyntaxError(LoxError):
+    pass
+
+class LoxResolutionError(LoxError):
+    pass
+
+class LoxRuntimeError(LoxError):
+    pass
+```
+
+`DiagnosticReporter` conserva el estado general de la ejecución:
+
+```python
+class DiagnosticReporter:
+    def __init__(self):
+        self.had_error = False
+        self.had_runtime_error = False
+
+    def report_error(self, line, where, message):
+        self.had_error = True
+        print(
+            f"[línea {line}] Error{where}: {message}",
+            file=sys.stderr,
+        )
+```
+
+El scanner puede informar un carácter inválido y continuar reconociendo los caracteres siguientes. El parser usa recuperación en modo pánico:
+
+```python
+def _synchronize(self):
+    self._advance()
+
+    while not self._is_at_end():
+        if self._previous().token_type == TokenType.SEMICOLON:
+            return
+
+        if self._peek().token_type in (
+            TokenType.FUN,
+            TokenType.VAR,
+            TokenType.FOR,
+            TokenType.IF,
+            TokenType.WHILE,
+            TokenType.PRINT,
+            TokenType.RETURN,
+        ):
+            return
+
+        self._advance()
+```
+
+Después de un error, descarta tokens hasta encontrar un `;` o el comienzo probable de otra declaración. Esto evita interpretar el resto de una sentencia inválida como muchos errores independientes.
+
+Finalmente, la CLI usa códigos de salida diferenciados:
+
+```python
+if self.diagnostics.had_error:
+    sys.exit(65)
+
+if self.diagnostics.had_runtime_error:
+    sys.exit(70)
+```
+
+La diferencia práctica es que la cátedra presenta un mecanismo más directo, basado en lanzar y capturar excepciones. El TP separa errores léxicos, sintácticos, semánticos y de ejecución, incluye línea y columna e intenta recuperar el análisis cuando es posible.
+
+### 4. AST
+
+El AST representa la estructura del programa sin conservar detalles innecesarios como espacios o comentarios. Para:
+
+```lox
+2 + 3 * 4
+```
+
+ambas versiones construyen conceptualmente:
+
+```text
+       +
+      / \
+     2   *
+        / \
+       3   4
+```
+
+#### Cátedra
+
+Los nodos son clases mutables que solamente almacenan datos:
+
+```python
+class BinaryExpr(Expr):
+    def __init__(self, left: Expr, operator: Token, right: Expr):
+        self.left = left
+        self.operator = operator
+        self.right = right
+```
+
+El AST está dividido entre `Expr.py` y `Stmt.py`. Para operar sobre un nodo, el intérprete o el resolver inspeccionan su tipo mediante `singledispatchmethod`.
+
+#### TP
+
+Los nodos son dataclasses inmutables y participan del patrón Visitor:
+
+```python
+@dataclass(frozen=True)
+class BinaryExpr(Expr):
+    left: Expr
+    operator: Token
+    right: Expr
+
+    def accept(self, visitor: ExprVisitor):
+        return visitor.visit_binary_expr(self)
+```
+
+La clase base exige que todos los nodos implementen `accept()`:
+
+```python
+class Expr(ABC):
+    @abstractmethod
+    def accept(self, visitor: "ExprVisitor[T]") -> T:
+        pass
+```
+
+El contrato del visitante declara todas las operaciones disponibles:
+
+```python
+class ExprVisitor(ABC):
+    @abstractmethod
+    def visit_binary_expr(self, expr: "BinaryExpr"):
+        pass
+
+    @abstractmethod
+    def visit_literal_expr(self, expr: "LiteralExpr"):
+        pass
+```
+
+El mismo nodo puede enviarse a distintos visitantes:
+
+```text
+BinaryExpr.accept(Interpreter) → ejecuta la operación
+BinaryExpr.accept(Resolver)    → resuelve sus operandos
+BinaryExpr.accept(AstPrinter)  → genera texto del árbol
+```
+
+La diferencia central es de diseño. En la cátedra, la operación decide qué hacer según el tipo recibido. En el TP, el nodo redirige explícitamente al método apropiado del visitante. Los datos representados por el árbol son casi idénticos.
+
+### 5. Cómo se guardan las distancias léxicas
+
+El Resolver calcula la cantidad de entornos que separan el uso de una variable de su declaración. Por ejemplo:
+
+```lox
+{
+    var a = "exterior";
+
+    {
+        print a;
+    }
+}
+```
+
+Cuando se ejecuta `print a`, la variable está a una distancia de un entorno:
+
+```text
+Entorno del print       distancia 0
+        │
+        ▼
+Entorno que contiene a  distancia 1
+```
+
+#### Cátedra
+
+La cátedra usa el propio objeto `VariableExpr` o `AssignmentExpr` como clave:
+
+```python
+self.local_scope_depths: dict[
+    VariableExpr | AssignmentExpr,
+    int,
+] = {}
+
+def resolve_depth(self, expression, depth):
+    self.local_scope_depths[expression] = depth
+```
+
+Durante la ejecución consulta ese mismo objeto:
+
+```python
+if expression in self.local_scope_depths:
+    depth = self.local_scope_depths[expression]
+    return self.env.get(expression.name.lexeme, depth)
+
+return self.globals.get(expression.name.lexeme)
+```
+
+Las clases del AST de la cátedra no implementan igualdad estructural, por lo que Python compara esos objetos por identidad. Dos expresiones escritas igual siguen siendo claves diferentes.
+
+#### TP
+
+El TP almacena explícitamente la identidad numérica del nodo:
+
+```python
+self.locals: dict[int, int] = {}
+
+def resolve(self, expr: Expr, depth: int):
+    self.locals[id(expr)] = depth
+```
+
+Después consulta `id(expr)`:
+
+```python
+def _look_up_variable(self, name: Token, expr: Expr):
+    distance = self.locals.get(id(expr))
+
+    if distance is not None:
+        return self.environment.get_at(distance, name.lexeme)
+
+    return self.globals.get(name)
+```
+
+Esto es relevante porque las dataclasses del TP tienen igualdad estructural. Dos nodos con los mismos campos podrían compararse como iguales. Al usar `id(expr)`, cada aparición concreta del código conserva su propia resolución, aunque otra expresión tenga la misma forma.
+
+Para una asignación se reutiliza la distancia:
+
+```python
+distance = self.locals.get(id(expr))
+
+if distance is not None:
+    self.environment.assign_at(distance, expr.name, value)
+else:
+    self.globals.assign(expr.name, value)
+```
+
+Ambas implementaciones optimizan la búsqueda de la misma manera: el Resolver hace el trabajo una vez y el Interpreter salta directamente al entorno correcto. La diferencia es si la clave del diccionario es el objeto expresión o `id(expr)`.
+
+### 6. Interpreter
+
+Las dos versiones son intérpretes Tree-Walk: ejecutan el programa recorriendo recursivamente el AST. La mayor diferencia es el mecanismo de despacho utilizado para seleccionar la operación de cada nodo.
+
+#### Cátedra: `singledispatchmethod`
+
+```python
+@singledispatchmethod
+def evaluate(self, expression: Expr):
+    raise RuntimeError(
+        f"Unknown expression type: {type(expression)}"
+    )
+
+@evaluate.register
+def _(self, expression: LiteralExpr):
+    return expression.value
+
+@evaluate.register
+def _(self, expression: BinaryExpr):
+    left = self.evaluate(expression.left)
+    right = self.evaluate(expression.right)
+    # Aplicar expression.operator.
+```
+
+Python inspecciona dinámicamente el tipo del argumento y busca la implementación registrada.
+
+El flujo es:
+
+```text
+evaluate(binary_expr)
+→ singledispatch busca BinaryExpr
+→ ejecuta la función registrada para BinaryExpr
+```
+
+#### TP: Visitor
+
+```python
+def evaluate(self, expr: Expr):
+    return expr.accept(self)
+
+def visit_literal_expr(self, expr: LiteralExpr):
+    return expr.value
+
+def visit_binary_expr(self, expr: BinaryExpr):
+    left = self.evaluate(expr.left)
+    right = self.evaluate(expr.right)
+    # Aplicar expr.operator.
+```
+
+El nodo realiza una llamada directa al visitante:
+
+```python
+def accept(self, visitor):
+    return visitor.visit_binary_expr(self)
+```
+
+El flujo es:
+
+```text
+evaluate(binary_expr)
+→ binary_expr.accept(interpreter)
+→ interpreter.visit_binary_expr(binary_expr)
+```
+
+La semántica de suma, resta, bucles y funciones permanece muy próxima. Lo que cambia es cómo se llega al código que implementa cada operación.
+
+El TP también centraliza los errores de ejecución:
+
+```python
+try:
+    for statement in statements:
+        self.execute(statement)
+except LoxRuntimeError as error:
+    self.diagnostics.report_runtime_error(error)
+```
+
+Y normaliza la salida mediante `stringify()`, por ejemplo mostrando `10` en lugar de `10.0`. La cátedra imprime directamente el objeto de Python:
+
+```python
+value = self.evaluate(statement.expression)
+print(value)
+```
+
+El Visitor también tiene impacto en el benchmark. En un bucle grande, cada condición, operación y asignación recorre nodos repetidamente. La llamada directa `accept() → visit_*()` evita el trabajo de resolución de `singledispatchmethod`. Esta es una explicación probable de parte de la diferencia de rendimiento observada, aunque para atribuir porcentajes exactos sería necesario perfilar ambos intérpretes por función.
+
+## Benchmark: bucle grande
+
+Se compararon ambas implementaciones ejecutando exactamente [`benches/programs/large_loop.lox`](benches/programs/large_loop.lox):
+
+```lox
+var sum = 0;
+for (var i = 0; i < 500000; i = i + 1) {
+    sum = sum + (i % 7);
+}
+print sum;
+```
+
+La salida de ambas implementaciones se valida numéricamente como `1499994` antes de aceptar cada medición.
+
+### Metodología
+
+- Medición end-to-end con `time.perf_counter()`.
+- Incluye inicio de Python, scanner, parser, resolver y ejecución.
+- Una ejecución de calentamiento por implementación.
+- Siete ejecuciones medidas por implementación.
+- Mismo archivo y Python 3.12.14 para ambas versiones.
+- Equipo: MacBook Pro con Apple M5 Pro de 18 núcleos y 48 GB de memoria.
+- Sistema: macOS 26.6.2, arquitectura arm64.
+
+### Resultados
+
+| Implementación | Mediana | Promedio | Mínimo | Máximo |
+|---|---:|---:|---:|---:|
+| TP | **1,2685 s** | 1,2696 s | 1,2581 s | 1,2848 s |
+| Cátedra | 6,2798 s | 6,2673 s | 6,2212 s | 6,2966 s |
+
+En esta prueba, el TP fue **4,95 veces más rápido** según la mediana.
+
+Una explicación probable es el costo de `singledispatchmethod` en la implementación de la cátedra. Dentro de un bucle, cada condición, lectura, asignación y operación atraviesa repetidamente ese mecanismo de despacho. El TP realiza llamadas directas desde `accept()` hacia los métodos Visitor. Esta interpretación es consistente con el diseño de ambos programas, pero el benchmark no incluye un perfil por función y, por sí solo, no demuestra cuánto aporta cada diferencia interna.
+
+Los resultados dependen del equipo, la carga del sistema y la versión de Python. El script reproducible está en [`benches/compare_loop.py`](benches/compare_loop.py).
+
+Ejecutarlo desde `LyC-TP`:
+
+```bash
+.venv/bin/python benches/compare_loop.py 7
+```
+
+El argumento final indica la cantidad de repeticiones medidas.
+
+## Tests
+
+Ejecutar los tests propios:
+
+```bash
+uv run pytest -q
+```
+
+Resultado actual:
+
+```text
+90 passed
+```
+
+Ejecutar la suite oficial de la cátedra:
+
+```bash
 python3 ../Practica/plox/real-tests/script.py "uv run pylox"
 ```
-Comprende la verificación de:
-- `0-simple.lox` (Aritmética, cadenas, lógica booleana)
-- `1-flow.lox` (Bifurcaciones `if/else`, bucles `while`, bucles `for`)
-- `2-functions.lox` (Ámbitos, recursión de Fibonacci, funciones de orden superior, closures y *Closure Bug*)
-- `3-minsky.lox` (Simulación completa de una Minsky Machine con registro y salto condicional)
-- `4-fizzbuzz.lox` (Bucles, módulo `%` y acumuladores de texto)
 
-> Salida esperada: **`| Todo OK |`**.
+La implementación pasa:
 
----
+```text
+0-simple.lox
+1-flow.lox
+2-functions.lox
+3-minsky.lox
+4-fizzbuzz.lox
 
-## 📊 Benchmarks de Rendimiento
-
-Se incluye una suite de pruebas de rendimiento automatizada en `benches/`:
-
-```sh
-uv run python benches/benchmark.py 3
+| Todo OK |
 ```
 
-### Resultados Obtenidos (Promedios)
+## Alcance
 
-| Benchmark | Descripción | Promedio (s) | Mínimo (s) | Máximo (s) |
-| :--- | :--- | :---: | :---: | :---: |
-| **`fibonacci.lox`** | Cálculo recursivo de `fib(25)` con desenrollado intensivo de stack | **0.5844 s** | 0.5388 s | 0.6170 s |
-| **`loop.lox`** | Bucle de 50.000 iteraciones con mutación de variables y módulo | **0.1536 s** | 0.1510 s | 0.1559 s |
-| **`minsky.lox`** | Simulación de máquina de Minsky (1.500 evaluaciones completas) | **3.7478 s** | 3.7393 s | 3.7540 s |
-
-### Conclusiones de Rendimiento
-- La resolución estática de variables (`Resolver`) reduce significativamente el costo de búsqueda en cadenas de entornos en tiempo de ejecución al permitir saltos indexados directos (`get_at`).
-- El modelo *Tree-Walk* ofrece claridad conceptual y semántica exacta para la entrega parcial, sentando la base de validaciones semánticas requeridas para la futura compilación a bytecode y máquina virtual de la Entrega Final.
+Esta versión corresponde al intérprete Tree-Walk de la entrega parcial. Todavía no implementa compilación a bytecode, máquina virtual, clases ni herencia.
