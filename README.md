@@ -484,18 +484,13 @@ if self.diagnostics.had_runtime_error:
 
 La diferencia práctica es que la cátedra presenta un mecanismo más directo, basado en lanzar y capturar excepciones. El TP separa errores léxicos, sintácticos, semánticos y de ejecución, incluye línea.
 
-### 4. AST
+### 4. AST: representación de los nodos
 
-El AST representa la estructura del programa sin conservar detalles innecesarios como espacios o comentarios. Para:
-
-```lox
-2 + 3 * 4
-```
-
+Ambas implementaciones representan expresiones y sentencias mediante nodos del AST. Por ejemplo, una expresión binaria almacena el operando izquierdo, el operador y el operando derecho.
 
 #### Cátedra
 
-Los nodos son clases mutables que solamente almacenan datos:
+Los nodos son clases mutables con un constructor explícito:
 
 ```python
 class BinaryExpr(Expr):
@@ -505,11 +500,11 @@ class BinaryExpr(Expr):
         self.right = right
 ```
 
-El AST está dividido entre `Expr.py` y `Stmt.py`. Para operar sobre un nodo, el intérprete o el resolver inspeccionan su tipo mediante `singledispatchmethod`.
+El AST está dividido entre `Expr.py` y `Stmt.py`. Los atributos de sus nodos pueden modificarse después de crearlos.
 
 #### TP
 
-Los nodos son dataclasses inmutables y participan del patrón Visitor:
+Los nodos se definen en `ast.py` mediante dataclasses con `frozen=True`. Este fragmento muestra sus campos; el método `accept()` se explica en la sección del intérprete:
 
 ```python
 @dataclass(frozen=True)
@@ -517,42 +512,12 @@ class BinaryExpr(Expr):
     left: Expr
     operator: Token
     right: Expr
-
-    def accept(self, visitor: ExprVisitor):
-        return visitor.visit_binary_expr(self)
+    # Método accept() omitido en este fragmento.
 ```
 
-La clase base exige que todos los nodos implementen `accept()`:
+La dataclass genera el constructor y la comparación por campos. `frozen=True` impide reasignar sus atributos después de crear el nodo; no vuelve inmutables automáticamente los objetos que esos atributos contienen.
 
-```python
-class Expr(ABC):
-    @abstractmethod
-    def accept(self, visitor: "ExprVisitor[T]") -> T:
-        pass
-```
-
-El contrato del visitante declara todas las operaciones disponibles:
-
-```python
-class ExprVisitor(ABC):
-    @abstractmethod
-    def visit_binary_expr(self, expr: "BinaryExpr"):
-        pass
-
-    @abstractmethod
-    def visit_literal_expr(self, expr: "LiteralExpr"):
-        pass
-```
-
-El mismo nodo puede enviarse a distintos visitantes:
-
-```text
-BinaryExpr.accept(Interpreter) → ejecuta la operación
-BinaryExpr.accept(Resolver)    → resuelve sus operandos
-BinaryExpr.accept(AstPrinter)  → genera texto del árbol
-```
-
-La diferencia central es de diseño. En la cátedra, la operación decide qué hacer según el tipo recibido. En el TP, el nodo redirige explícitamente al método apropiado del visitante. Los datos representados por el árbol son casi idénticos.
+La información representada es prácticamente la misma. La diferencia está en cómo se definen los nodos y si sus atributos pueden modificarse. La forma de recorrerlos se compara en [Interpreter](#6-interpreter).
 
 ### 5. Cómo se guardan las distancias léxicas
 
@@ -677,6 +642,8 @@ evaluate(binary_expr)
 
 #### TP: Visitor
 
+Visitor es el patrón que permite realizar distintas operaciones sobre el AST. `Interpreter` es uno de sus visitantes: implementa métodos como `visit_literal_expr()` y `visit_binary_expr()`, mientras que cada nodo implementa `accept()` para llamar al método correspondiente.
+
 ```python
 def evaluate(self, expr: Expr):
     return expr.accept(self)
@@ -704,6 +671,8 @@ evaluate(binary_expr)
 → binary_expr.accept(interpreter)
 → interpreter.visit_binary_expr(binary_expr)
 ```
+
+La clase base `Expr` exige implementar `accept()`, y `ExprVisitor` define los métodos que debe ofrecer un visitante. El mismo mecanismo también permite que `Resolver` analice las variables y que `AstPrinter` genere una representación textual de las expresiones.
 
 La semántica de suma, resta, bucles y funciones permanece muy próxima. Lo que cambia es cómo se llega al código que implementa cada operación.
 
