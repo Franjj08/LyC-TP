@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-import time
 from typing import Any
 from lox.syntax.ast import FunDecl
 from lox.runtime.environment import Environment
@@ -40,15 +39,3 @@ class LoxFunction(LoxCallable):
 
     def __str__(self) -> str:
         return f"<fn {self.declaration.name.lexeme}>"
-
-
-class ClockFunction(LoxCallable):
-
-    def arity(self) -> int:
-        return 0
-
-    def call(self, interpreter: Any, arguments: list[Any]) -> Any:
-        return float(time.time())
-
-    def __str__(self) -> str:
-        return "<native fn clock>"

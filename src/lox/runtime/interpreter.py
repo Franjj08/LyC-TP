@@ -24,7 +24,7 @@ from lox.syntax.ast import (
 from lox.syntax.token import Token, TokenType
 from lox.errors import DiagnosticReporter, LoxRuntimeError, LoxReturnException
 from lox.runtime.environment import Environment
-from lox.runtime.callable import LoxCallable, LoxFunction, ClockFunction
+from lox.runtime.callable import LoxCallable, LoxFunction
 
 
 class Interpreter(ExprVisitor, StmtVisitor):
@@ -34,8 +34,6 @@ class Interpreter(ExprVisitor, StmtVisitor):
         self.globals: Environment = Environment()
         self.environment: Environment = self.globals
         self.locals: dict[int, int] = {}
-
-        self.globals.define("clock", ClockFunction())
 
     def resolve(self, expr: Expr, depth: int) -> None:
         self.locals[id(expr)] = depth

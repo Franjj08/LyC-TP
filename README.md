@@ -4,6 +4,8 @@ Trabajo Práctico de **Lenguajes y Compiladores  — FIUBA**.
 
 El proyecto implementa en Python 3.12 un intérprete *Tree-Walk* para el lenguaje Lox. Recibe código fuente, reconoce sus tokens, construye un Árbol de Sintaxis Abstracta (AST), resuelve los ámbitos léxicos y finalmente ejecuta el árbol.
 
+Jiangjie Chen - 109747
+
 ## Qué hace el TP
 
 El intérprete soporta:
@@ -96,14 +98,9 @@ Token(EOF, lexeme='', literal=None, line=1)
 
 ### 2. Parser
 
-[`parser.py`](src/lox/syntax/parser.py) recibe los tokens y construye el AST mediante descenso recursivo. Cada método representa un nivel de precedencia:
+[`parser.py`](src/lox/syntax/parser.py) recibe los tokens y construye el AST mediante descenso recursivo.
 
-```text
-assignment → or → and → equality → comparison
-           → term → factor → unary → call → primary
-```
-
-La suma se procesa en `_term()`, que obtiene sus operandos mediante `_factor()`:
+Eg: La suma se procesa en `_term()`, que obtiene sus operandos mediante `_factor()`:
 
 ```python
 def _term(self) -> Expr:
@@ -260,7 +257,7 @@ uv sync
 Ejecutar un archivo:
 
 ```bash
-uv run pylox programa.lox
+uv run pylox example.lox
 ```
 
 Abrir el REPL:
@@ -272,29 +269,27 @@ uv run pylox
 Inspeccionar los tokens:
 
 ```bash
+uv run pylox --scanner
+```
+
+Inspeccionar los tokens con un ejemplo:
+
+```bash
 uv run pylox --scanner example.lox
 ```
 
 Inspeccionar el AST:
 
 ```bash
+uv run pylox --ast
+```
+
+Inspeccionar el AST con un ejemplo:
+
+```bash
 uv run pylox --ast example.lox
 ```
 
-### Programa de demostración: plan de ahorro
-
-[`programa.lox`](programa.lox) simula un plan de ahorro y calcula cuántos meses se necesitan para alcanzar una meta. Parte de un capital inicial, agrega un aporte mensual y aplica interés sobre el saldo acumulado.
-
-El ejemplo tiene un objetivo concreto y utiliza:
-
-- funciones con parámetros y valores de retorno;
-- una función anidada que conserva el aporte y la tasa mediante un *closure*;
-- variables globales y locales;
-- un ciclo `while` con un límite de meses;
-- condiciones con `if`, `else`, `and` y `or`;
-- operaciones aritméticas, comparación y módulo.
-
-Con los valores incluidos, el programa parte de `100000`, aporta `20000` por mes, aplica una tasa mensual del `1 %` y calcula cuándo alcanza la meta de `250000`. La meta se alcanza en el mes 7 con un saldo aproximado de `251484,24`.
 
 ## Comparación con la implementación de la cátedra
 
@@ -345,7 +340,8 @@ class Token:
 `frozen=True` impide modificar accidentalmente un token después de crearlo. Se conserva la línea para ubicar los errores en el código fuente. Esto permite producir un diagnóstico como:
 
 ```text
-[línea 3] Error en ')': Se esperaba una expresión.
+lox> print (1 + );
+[línea 1] Error en ')': Se esperaba una expresión válida, se obtuvo ')'.
 ```
 
 ### 2. Transformación de `for` en `while`
@@ -486,7 +482,7 @@ if self.diagnostics.had_runtime_error:
     sys.exit(70)
 ```
 
-La diferencia práctica es que la cátedra presenta un mecanismo más directo, basado en lanzar y capturar excepciones. El TP separa errores léxicos, sintácticos, semánticos y de ejecución, incluye línea e intenta recuperar el análisis cuando es posible.
+La diferencia práctica es que la cátedra presenta un mecanismo más directo, basado en lanzar y capturar excepciones. El TP separa errores léxicos, sintácticos, semánticos y de ejecución, incluye línea.
 
 ### 4. AST
 
@@ -765,7 +761,7 @@ uv run pytest -q
 Resultado actual:
 
 ```text
-90 passed
+89 passed
 ```
 
 Ejecutar la copia incluida de la suite oficial de la cátedra:

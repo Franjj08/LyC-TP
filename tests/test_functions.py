@@ -120,16 +120,6 @@ def test_return_at_top_level_error():
     assert "No se puede retornar desde código de nivel superior" in str(exc_info.value)
 
 
-def test_native_clock_function(capsys):
-    code = """
-    var t = clock();
-    print t > 0;
-    """
-    run_source(code)
-    stdout, _ = capsys.readouterr()
-    assert stdout == "true\n"
-
-
 def test_real_test_0_simple(capsys):
     simple_file = Path(__file__).resolve().parent / "real_tests/0-simple.lox"
     assert simple_file.exists()
