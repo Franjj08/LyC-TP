@@ -763,11 +763,12 @@ Resultado actual:
 90 passed
 ```
 
-Ejecutar la suite oficial de la cátedra:
+Ejecutar la copia incluida de la suite oficial de la cátedra:
 
 ```bash
-python3 ../Practica/plox/real-tests/script.py "uv run pylox"
+python3 tests/real_tests/script.py "uv run pylox"
 ```
+
 
 La implementación pasa:
 

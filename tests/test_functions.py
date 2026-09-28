@@ -131,7 +131,7 @@ def test_native_clock_function(capsys):
 
 
 def test_real_test_0_simple(capsys):
-    simple_file = Path(__file__).resolve().parent.parent.parent / "Practica/plox/real-tests/0-simple.lox"
+    simple_file = Path(__file__).resolve().parent / "real_tests/0-simple.lox"
     assert simple_file.exists()
 
     cli = LoxCLI()

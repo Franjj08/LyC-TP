@@ -202,7 +202,7 @@ def test_logical_precedence():
 
 
 def test_real_test_1_flow(capsys):
-    flow_file = Path(__file__).resolve().parent.parent.parent / "Practica/plox/real-tests/1-flow.lox"
+    flow_file = Path(__file__).resolve().parent / "real_tests/1-flow.lox"
     assert flow_file.exists()
 
     cli = LoxCLI()

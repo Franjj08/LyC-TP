@@ -93,7 +93,7 @@ def test_error_return_from_top_level():
 
 
 def test_real_test_2_functions(capsys):
-    test_file = Path(__file__).resolve().parent.parent.parent / "Practica/plox/real-tests/2-functions.lox"
+    test_file = Path(__file__).resolve().parent / "real_tests/2-functions.lox"
     assert test_file.exists()
 
     cli = LoxCLI()
@@ -104,7 +104,7 @@ def test_real_test_2_functions(capsys):
 
 
 def test_real_test_3_minsky(capsys):
-    test_file = Path(__file__).resolve().parent.parent.parent / "Practica/plox/real-tests/3-minsky.lox"
+    test_file = Path(__file__).resolve().parent / "real_tests/3-minsky.lox"
     assert test_file.exists()
 
     cli = LoxCLI()
@@ -115,7 +115,7 @@ def test_real_test_3_minsky(capsys):
 
 
 def test_real_test_4_fizzbuzz(capsys):
-    test_file = Path(__file__).resolve().parent.parent.parent / "Practica/plox/real-tests/4-fizzbuzz.lox"
+    test_file = Path(__file__).resolve().parent / "real_tests/4-fizzbuzz.lox"
     assert test_file.exists()
 
     cli = LoxCLI()
