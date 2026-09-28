@@ -247,7 +247,7 @@ Requisitos:
 - Python 3.12 o superior.
 - [`uv`](https://docs.astral.sh/uv/).
 
-Instalar las dependencias:
+Desde la carpeta que contiene `LyC-TP`, instalar el proyecto y sus dependencias:
 
 ```bash
 cd LyC-TP
@@ -755,8 +755,10 @@ Una explicación probable es el costo de `singledispatchmethod` en la implementa
 Ejecutar los tests propios:
 
 ```bash
-uv run pytest -q
+uv run --extra dev pytest -q
 ```
+
+`pytest` es una dependencia opcional del extra `dev`: `uv sync` no lo instala por defecto. Usá `--extra dev` al ejecutar las pruebas para asegurar que esté disponible.
 
 Resultado actual:
 
