@@ -747,7 +747,9 @@ La salida de ambas implementaciones se valida numéricamente como `1499994` ante
 | TP | **1,2685 s** | 
 | Cátedra | 6,2798 s |
 
-Una explicación probable es el costo de `singledispatchmethod` en la implementación de la cátedra. Dentro de un bucle, cada condición, lectura, asignación y operación atraviesa repetidamente ese mecanismo de despacho. El TP realiza llamadas directas desde `accept()` hacia los métodos Visitor. 
+En el benchmark se ejecutó el mismo programa, con un bucle de 500.000 iteraciones, en ambas implementaciones. El TP tardó aproximadamente 1,27 segundos y la versión de cátedra 6,28 segundos, por lo que el TP fue unas cinco veces más rápido en esta prueba.
+
+Una explicación probable es cómo cada intérprete selecciona la operación que corresponde a un nodo del AST. La cátedra utiliza `singledispatchmethod`, que selecciona el método según el tipo del nodo. El TP utiliza el patrón Visitor: cada nodo llama explícitamente al método que lo procesa. Esto puede reducir el costo de seleccionar la operación.
 
 
 ## Tests
