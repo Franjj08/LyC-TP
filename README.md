@@ -754,15 +754,6 @@ La salida de ambas implementaciones se valida numéricamente como `1499994` ante
 Una explicación probable es el costo de `singledispatchmethod` en la implementación de la cátedra. Dentro de un bucle, cada condición, lectura, asignación y operación atraviesa repetidamente ese mecanismo de despacho. El TP realiza llamadas directas desde `accept()` hacia los métodos Visitor. 
 
 
-
-Ejecutarlo desde `LyC-TP`:
-
-```bash
-.venv/bin/python benches/compare_loop.py 7
-```
-
-El argumento final indica la cantidad de repeticiones medidas.
-
 ## Tests
 
 Ejecutar los tests propios:
