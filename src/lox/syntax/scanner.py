@@ -4,11 +4,6 @@ from lox.errors import DiagnosticReporter, LoxLexicalError
 
 
 class Scanner:
-    """Analizador léxico (Scanner) para el lenguaje Lox.
-    
-    Convierte el código fuente en una secuencia ordenada de Tokens,
-    rastreando información de línea y recolectando diagnósticos de error.
-    """
 
     def __init__(self, source: str, diagnostics: Optional[DiagnosticReporter] = None):
         self.source = source
@@ -20,12 +15,10 @@ class Scanner:
         self.line: int = 1
 
     def scan_tokens(self) -> list[Token]:
-        """Escanea todo el código fuente y retorna la lista de tokens finalizada con EOF."""
         while not self._is_at_end():
             self.start = self.current
             self.scan_token()
 
-        # Añadimos el token EOF al final
         self.tokens.append(
             Token(
                 token_type=TokenType.EOF,
@@ -37,11 +30,9 @@ class Scanner:
         return self.tokens
 
     def scan_token(self) -> None:
-        """Escanea un único token o secuencia de caracteres."""
         c = self._advance()
 
         match c:
-            # Tokens de un solo carácter
             case "(":
                 self._add_token(TokenType.LEFT_PAREN)
             case ")":
@@ -65,7 +56,6 @@ class Scanner:
             case "%":
                 self._add_token(TokenType.PERCENT)
 
-            # Operadores de uno o dos caracteres
             case "!":
                 token_type = TokenType.BANG_EQUAL if self._match("=") else TokenType.BANG
                 self._add_token(token_type)
@@ -79,41 +69,31 @@ class Scanner:
                 token_type = TokenType.GREATER_EQUAL if self._match("=") else TokenType.GREATER
                 self._add_token(token_type)
 
-            # Barra diagonal o comentario de línea
             case "/":
                 if self._match("/"):
-                    # Comentario de una línea: ignorar hasta el fin de línea o EOF
                     while self._peek() != "\n" and not self._is_at_end():
                         self._advance()
                 else:
                     self._add_token(TokenType.SLASH)
 
-            # Espacios en blanco
             case " " | "\r" | "\t":
                 pass
             case "\n":
                 self.line += 1
 
-            # Literales de texto (comillas dobles o simples)
             case '"' | "'":
                 self._string(c)
 
-            # Literales numéricos
             case _ if c.isdigit():
                 self._number()
 
-            # Identificadores y palabras reservadas
             case _ if c.isalpha() or c == "_":
                 self._identifier()
 
-            # Carácter no reconocido
             case _:
                 self._error(f"Carácter inesperado '{c}'")
 
-    # ---------- Manejo de Literales ---------- #
-
     def _string(self, quote_char: str) -> None:
-        """Escanea un literal de texto, procesando secuencias de escape y multilíneas."""
         value_chars: list[str] = []
 
         while not self._is_at_end() and self._peek() != quote_char:
@@ -123,7 +103,6 @@ class Scanner:
                 self.line += 1
 
             if ch == "\\":
-                # Carácter de escape
                 self._advance()
                 if self._is_at_end():
                     break
@@ -151,20 +130,17 @@ class Scanner:
             self._error(f"Cadena de texto sin terminar: '{self.source[self.start:self.current]}'")
             return
 
-        # Consumir la comilla de cierre
         self._advance()
 
         literal_value = "".join(value_chars)
         self._add_token(TokenType.STRING, literal=literal_value)
 
     def _number(self) -> None:
-        """Escanea un número entero o de punto flotante."""
         while self._peek().isdigit():
             self._advance()
 
-        # Parte decimal opcional: requiere un punto seguido de al menos un dígito
         if self._peek() == "." and self._peek_next().isdigit():
-            self._advance()  # Consumir el '.'
+            self._advance()
             while self._peek().isdigit():
                 self._advance()
 
@@ -176,15 +152,12 @@ class Scanner:
             self._error(f"Formato numérico inválido: '{lexeme}'")
 
     def _identifier(self) -> None:
-        """Escanea un identificador de usuario o palabra clave reservada."""
         while self._peek().isalnum() or self._peek() == "_":
             self._advance()
 
         lexeme = self.source[self.start : self.current]
         token_type = KEYWORDS.get(lexeme, TokenType.IDENTIFIER)
         self._add_token(token_type)
-
-    # ---------- Funciones Auxiliares ---------- #
 
     def _is_at_end(self) -> bool:
         return self.current >= len(self.source)

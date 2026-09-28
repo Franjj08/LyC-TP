@@ -74,7 +74,6 @@ class LoxCLI:
                 self.run(source, is_repl=True)
                 source_lines.clear()
                 current_prompt = prompt_str
-                # En modo interactivo reseteamos el estado de error por entrada completa.
                 self.diagnostics.reset()
             except (EOFError, KeyboardInterrupt):
                 print("\nHasta luego!")
@@ -82,12 +81,6 @@ class LoxCLI:
 
     @staticmethod
     def _needs_more_input(source: str) -> bool:
-        """Indica si una entrada del REPL tiene delimitadores o cadenas sin cerrar.
-
-        Ignora delimitadores que aparezcan dentro de cadenas o comentarios de línea,
-        para que bloques como funciones, condicionales y bucles puedan escribirse en
-        varias líneas sin enviar fragmentos incompletos al parser.
-        """
         paren_depth = 0
         brace_depth = 0
         quote: str | None = None
@@ -165,14 +158,12 @@ class LoxCLI:
                     print(f"(return{val_str})")
             return statements
 
-        # Análisis Semántico (Resolución estática de variables)
         resolver = Resolver(self.interpreter, diagnostics=self.diagnostics)
         resolver.resolve(statements)
 
         if self.diagnostics.had_error:
             return None
 
-        # En REPL interactivo (o ejecución directa de una sola expresión), imprimir el valor de salida
         if is_repl and len(statements) == 1 and isinstance(statements[0], ExpressionStmt):
             try:
                 val = self.interpreter.evaluate(statements[0].expression)
@@ -190,7 +181,6 @@ def main() -> None:
     scanner_mode = False
     ast_mode = False
 
-    # Verificamos si se solicitó el modo scanner o ast
     if "scanner" in args:
         scanner_mode = True
         args.remove("scanner")

@@ -6,22 +6,14 @@ from lox.syntax.token import Token
 T = TypeVar("T")
 
 
-# =====================================================================
-# Expresiones (Expr)
-# =====================================================================
-
-
 class Expr(ABC):
-    """Clase base abstracta para todos los nodos de expresión del AST."""
 
     @abstractmethod
     def accept(self, visitor: "ExprVisitor[T]") -> T:
-        """Permite recorrer el nodo mediante el patrón Visitor."""
         pass
 
 
 class ExprVisitor(ABC):
-    """Interfaz para visitar los distintos nodos de expresión."""
 
     @abstractmethod
     def visit_binary_expr(self, expr: "BinaryExpr") -> Any:
@@ -58,7 +50,6 @@ class ExprVisitor(ABC):
 
 @dataclass(frozen=True)
 class BinaryExpr(Expr):
-    """Representa una operación binaria: izquierda operador derecha."""
 
     left: Expr
     operator: Token
@@ -73,7 +64,6 @@ class BinaryExpr(Expr):
 
 @dataclass(frozen=True)
 class GroupingExpr(Expr):
-    """Representa una expresión envuelta entre paréntesis: ( expresión )."""
 
     expression: Expr
 
@@ -86,7 +76,6 @@ class GroupingExpr(Expr):
 
 @dataclass(frozen=True)
 class LiteralExpr(Expr):
-    """Representa un valor literal: número, cadena, booleano o nil."""
 
     value: Any
 
@@ -105,7 +94,6 @@ class LiteralExpr(Expr):
 
 @dataclass(frozen=True)
 class UnaryExpr(Expr):
-    """Representa una operación unaria prefija: operador derecha."""
 
     operator: Token
     right: Expr
@@ -119,7 +107,6 @@ class UnaryExpr(Expr):
 
 @dataclass(frozen=True)
 class VariableExpr(Expr):
-    """Representa el acceso al valor de una variable por su identificador."""
 
     name: Token
 
@@ -132,7 +119,6 @@ class VariableExpr(Expr):
 
 @dataclass(frozen=True)
 class AssignmentExpr(Expr):
-    """Representa la asignación de un valor a una variable: nombre = expresión."""
 
     name: Token
     value: Expr
@@ -146,7 +132,6 @@ class AssignmentExpr(Expr):
 
 @dataclass(frozen=True)
 class LogicalExpr(Expr):
-    """Representa una operación lógica con cortocircuito: izquierda (and|or) derecha."""
 
     left: Expr
     operator: Token
@@ -161,7 +146,6 @@ class LogicalExpr(Expr):
 
 @dataclass(frozen=True)
 class CallExpr(Expr):
-    """Representa la invocación a una función o método: callee(argumentos)."""
 
     callee: Expr
     paren: Token
@@ -175,22 +159,14 @@ class CallExpr(Expr):
         return f"{self.callee}({args_str})"
 
 
-# =====================================================================
-# Sentencias (Stmt)
-# =====================================================================
-
-
 class Stmt(ABC):
-    """Clase base abstracta para todos los nodos de sentencia del AST."""
 
     @abstractmethod
     def accept(self, visitor: "StmtVisitor[T]") -> T:
-        """Permite recorrer la sentencia mediante el patrón Visitor."""
         pass
 
 
 class StmtVisitor(ABC):
-    """Interfaz para visitar los distintos nodos de sentencia."""
 
     @abstractmethod
     def visit_expression_stmt(self, stmt: "ExpressionStmt") -> Any:
@@ -227,7 +203,6 @@ class StmtVisitor(ABC):
 
 @dataclass(frozen=True)
 class ExpressionStmt(Stmt):
-    """Sentencia consistente en una única expresión evaluada por efecto de lado: expr;"""
 
     expression: Expr
 
@@ -237,7 +212,6 @@ class ExpressionStmt(Stmt):
 
 @dataclass(frozen=True)
 class PrintStmt(Stmt):
-    """Sentencia de impresión por consola: print expr;"""
 
     expression: Expr
 
@@ -247,7 +221,6 @@ class PrintStmt(Stmt):
 
 @dataclass(frozen=True)
 class VarDecl(Stmt):
-    """Declaración de variable: var nombre = expr; o var nombre;"""
 
     name: Token
     initializer: Optional[Expr] = None
@@ -258,7 +231,6 @@ class VarDecl(Stmt):
 
 @dataclass(frozen=True)
 class BlockStmt(Stmt):
-    """Bloque de sentencias delimitado por llaves: { stmt1; stmt2; ... }"""
 
     statements: list[Stmt]
 
@@ -268,7 +240,6 @@ class BlockStmt(Stmt):
 
 @dataclass(frozen=True)
 class IfStmt(Stmt):
-    """Sentencia condicional: if (condición) sentencia [else sentencia]"""
 
     condition: Expr
     then_branch: Stmt
@@ -280,7 +251,6 @@ class IfStmt(Stmt):
 
 @dataclass(frozen=True)
 class WhileStmt(Stmt):
-    """Sentencia de bucle mientras: while (condición) cuerpo"""
 
     condition: Expr
     body: Stmt
@@ -291,7 +261,6 @@ class WhileStmt(Stmt):
 
 @dataclass(frozen=True)
 class FunDecl(Stmt):
-    """Declaración de función: fun nombre(param1, param2) { cuerpo }"""
 
     name: Token
     params: list[Token]
@@ -303,7 +272,6 @@ class FunDecl(Stmt):
 
 @dataclass(frozen=True)
 class ReturnStmt(Stmt):
-    """Sentencia de retorno de función: return expr; o return;"""
 
     keyword: Token
     value: Optional[Expr] = None
@@ -312,13 +280,7 @@ class ReturnStmt(Stmt):
         return visitor.visit_return_stmt(self)
 
 
-# =====================================================================
-# Impresión del AST (AstPrinter)
-# =====================================================================
-
-
 class AstPrinter(ExprVisitor):
-    """Imprime el AST de expresiones en formato de S-Expressions tipo Lisp."""
 
     def print(self, expr: Expr) -> str:
         return expr.accept(self)

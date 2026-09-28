@@ -4,7 +4,6 @@ from typing import Any, Optional
 
 
 class LoxError(Exception):
-    """Clase base para todos los errores del intérprete Lox."""
 
     def __init__(self, message: str, line: Optional[int] = None):
         super().__init__(message)
@@ -18,22 +17,18 @@ class LoxError(Exception):
 
 
 class LoxLexicalError(LoxError):
-    """Error emitido durante el análisis léxico (Scanner)."""
     pass
 
 
 class LoxSyntaxError(LoxError):
-    """Error emitido durante el análisis sintáctico (Parser)."""
     pass
 
 
 class LoxResolutionError(LoxError):
-    """Error emitido durante el análisis semántico (Resolver)."""
     pass
 
 
 class LoxRuntimeError(LoxError):
-    """Error emitido durante la ejecución (Interpreter)."""
 
     def __init__(
         self,
@@ -48,7 +43,6 @@ class LoxRuntimeError(LoxError):
 
 
 class LoxReturnException(Exception):
-    """Excepción de control de flujo utilizada para desenrollar el stack en sentencias return."""
 
     def __init__(self, value: object):
         super().__init__("Return value unwinding")
@@ -56,7 +50,6 @@ class LoxReturnException(Exception):
 
 
 class DiagnosticReporter:
-    """Manejador centralizado de diagnóstico y reporte de errores."""
 
     def __init__(self):
         self.had_error: bool = False

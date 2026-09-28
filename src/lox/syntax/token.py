@@ -4,7 +4,6 @@ from typing import Any, Optional
 
 
 class TokenType(Enum):
-    # Tokens de un solo carácter
     LEFT_PAREN = auto()
     RIGHT_PAREN = auto()
     LEFT_BRACE = auto()
@@ -18,7 +17,6 @@ class TokenType(Enum):
     STAR = auto()
     PERCENT = auto()
 
-    # Operadores de uno o dos caracteres
     BANG = auto()
     BANG_EQUAL = auto()
     EQUAL = auto()
@@ -28,12 +26,10 @@ class TokenType(Enum):
     LESS = auto()
     LESS_EQUAL = auto()
 
-    # Literales
     IDENTIFIER = auto()
     STRING = auto()
     NUMBER = auto()
 
-    # Palabras clave reservadas
     AND = auto()
     CLASS = auto()
     ELSE = auto()
@@ -51,7 +47,6 @@ class TokenType(Enum):
     VAR = auto()
     WHILE = auto()
 
-    # Fin de archivo
     EOF = auto()
 
 
@@ -77,7 +72,6 @@ KEYWORDS: dict[str, TokenType] = {
 
 @dataclass(frozen=True)
 class Token:
-    """Representa una unidad léxica atómica (Token) con información de tipo y línea."""
 
     token_type: TokenType
     lexeme: str

@@ -7,21 +7,17 @@ from lox.errors import LoxReturnException
 
 
 class LoxCallable(ABC):
-    """Interfaz base para cualquier entidad invocable en Lox (funciones nativas y de usuario)."""
 
     @abstractmethod
     def arity(self) -> int:
-        """Retorna la cantidad de parámetros formales requeridos."""
         pass
 
     @abstractmethod
     def call(self, interpreter: Any, arguments: list[Any]) -> Any:
-        """Ejecuta la función con los argumentos provistos."""
         pass
 
 
 class LoxFunction(LoxCallable):
-    """Representación en tiempo de ejecución de una función definida por el usuario."""
 
     def __init__(self, declaration: FunDecl, closure: Environment):
         self.declaration = declaration
@@ -47,7 +43,6 @@ class LoxFunction(LoxCallable):
 
 
 class ClockFunction(LoxCallable):
-    """Función nativa clock() que retorna el tiempo transcurrido en segundos."""
 
     def arity(self) -> int:
         return 0

@@ -33,15 +33,56 @@ flowchart LR
     Interpreter --> Output["Salida o error"]
 ```
 
-### 1. Scanner
+### 1. Scanner y Token
 
-[`src/lox/syntax/scanner.py`](src/lox/syntax/scanner.py) recorre el texto carácter por carácter. Convierte:
+[`scanner.py`](src/lox/syntax/scanner.py) recorre el código carácter por carácter y genera objetos definidos en [`token.py`](src/lox/syntax/token.py):
 
-```lox
-var resultado = 2 + 3;
+```python
+@dataclass(frozen=True)
+class Token:
+    token_type: TokenType
+    lexeme: str
+    literal: Any = None
+    line: int = 1
 ```
 
-en una secuencia equivalente a:
+El scanner guarda el comienzo del lexema en `start` y la posición actual en `current`:
+
+```python
+def scan_tokens(self) -> list[Token]:
+    while not self._is_at_end():
+        self.start = self.current
+        self.scan_token()
+
+    self.tokens.append(
+        Token(
+            token_type=TokenType.EOF,
+            lexeme="",
+            literal=None,
+            line=self.line,
+        )
+    )
+    return self.tokens
+```
+
+`scan_token()` reconoce símbolos, operadores, números, cadenas, identificadores y palabras reservadas:
+
+```python
+c = self._advance()
+
+match c:
+    case "+":
+        self._add_token(TokenType.PLUS)
+    case "=":
+        token_type = TokenType.EQUAL_EQUAL if self._match("=") else TokenType.EQUAL
+        self._add_token(token_type)
+    case _ if c.isdigit():
+        self._number()
+    case _ if c.isalpha() or c == "_":
+        self._identifier()
+```
+
+Así, `var resultado = 2 + 3;` produce:
 
 ```text
 Token(VAR, lexeme='var', literal=None, line=1)
@@ -50,23 +91,60 @@ Token(EQUAL, lexeme='=', literal=None, line=1)
 Token(NUMBER, lexeme='2', literal=2.0, line=1)
 Token(PLUS, lexeme='+', literal=None, line=1)
 Token(NUMBER, lexeme='3', literal=3.0, line=1)
-Token(SEMICOLON, lexeme=';', literal=None, line=1)
 Token(EOF, lexeme='', literal=None, line=1)
 ```
 
-Cada token, definido en [`src/lox/syntax/token.py`](src/lox/syntax/token.py), conserva su tipo, lexema, valor literal, línea.
+### 2. Parser
 
-### 2. Parser y AST
+[`parser.py`](src/lox/syntax/parser.py) recibe los tokens y construye el AST mediante descenso recursivo. Cada método representa un nivel de precedencia:
 
-[`src/lox/syntax/parser.py`](src/lox/syntax/parser.py) usa descenso recursivo para convertir los tokens en nodos de [`src/lox/syntax/ast.py`](src/lox/syntax/ast.py).
-
-La expresión:
-
-```lox
-2 + 3 * 4
+```text
+assignment → or → and → equality → comparison
+           → term → factor → unary → call → primary
 ```
 
-se representa como:
+La suma se procesa en `_term()`, que obtiene sus operandos mediante `_factor()`:
+
+```python
+def _term(self) -> Expr:
+    expr = self._factor()
+
+    while self._match(TokenType.MINUS, TokenType.PLUS):
+        operator = self._previous()
+        right = self._factor()
+        expr = BinaryExpr(left=expr, operator=operator, right=right)
+
+    return expr
+```
+
+La multiplicación se procesa antes en `_factor()`. Por eso `2 + 3 * 4` se interpreta como `2 + (3 * 4)`.
+
+Los valores elementales se convierten en nodos dentro de `_primary()`:
+
+```python
+if self._match(TokenType.NUMBER, TokenType.STRING):
+    return LiteralExpr(self._previous().literal)
+
+if self._match(TokenType.IDENTIFIER):
+    return VariableExpr(name=self._previous())
+```
+
+### 3. AST
+
+[`ast.py`](src/lox/syntax/ast.py) define nodos inmutables para expresiones y sentencias. Cada nodo implementa `accept()` para participar del patrón Visitor:
+
+```python
+@dataclass(frozen=True)
+class BinaryExpr(Expr):
+    left: Expr
+    operator: Token
+    right: Expr
+
+    def accept(self, visitor: ExprVisitor) -> Any:
+        return visitor.visit_binary_expr(self)
+```
+
+Para `2 + 3 * 4`, el parser construye:
 
 ```text
        +
@@ -76,64 +154,71 @@ se representa como:
        3   4
 ```
 
-La estructura respeta la precedencia: primero se calcula `3 * 4` y después se suma `2`.
+El mismo árbol puede ser recorrido por `Resolver`, `Interpreter` y `AstPrinter`, cada uno con una operación diferente.
 
-El `for` se desazucara en el parser. Este código:
+### 4. Resolver
 
-```lox
-for (var i = 0; i < 3; i = i + 1) {
-    print i;
-}
-```
-
-se convierte internamente en una estructura equivalente a:
-
-```lox
-{
-    var i = 0;
-    while (i < 3) {
-        print i;
-        i = i + 1;
-    }
-}
-```
-
-El intérprete no necesita un nodo especial para `for`.
-
-### 3. Resolver
-
-[`src/lox/semantics/resolver.py`](src/lox/semantics/resolver.py) realiza un recorrido previo del AST. Para cada referencia local calcula cuántos entornos debe subir el intérprete hasta llegar a la declaración correspondiente.
-
-```text
-Entorno actual       profundidad 0
-      │
-      ▼
-Entorno exterior     profundidad 1
-      │
-      ▼
-Entorno exterior     profundidad 2
-```
-
-
-
-### 4. Interpreter y runtime
-
-[`src/lox/runtime/interpreter.py`](src/lox/runtime/interpreter.py) recorre el AST y ejecuta cada nodo. [`src/lox/runtime/environment.py`](src/lox/runtime/environment.py) almacena variables y conecta cada ámbito con su entorno exterior.
-
-Las funciones están implementadas en [`src/lox/runtime/callable.py`](src/lox/runtime/callable.py). Cada `LoxFunction` guarda:
+[`resolver.py`](src/lox/semantics/resolver.py) calcula cuántos entornos separan cada uso de una variable local de su declaración:
 
 ```python
-self.declaration  # Parámetros y cuerpo de la función.
-self.closure      # Entorno donde se declaró.
+def _resolve_local(self, expr: Expr, name: Token) -> None:
+    for i in range(len(self.scopes) - 1, -1, -1):
+        if name.lexeme in self.scopes[i]:
+            depth = len(self.scopes) - 1 - i
+            self.interpreter.resolve(expr, depth)
+            return
 ```
 
-`return` usa una excepción interna para abandonar inmediatamente el cuerpo de la función:
+El intérprete guarda esa distancia con `self.locals[id(expr)] = depth` y puede acceder directamente al entorno correcto.
+
+### 5. Interpreter
+
+[`interpreter.py`](src/lox/runtime/interpreter.py) ejecuta el AST mediante Visitor:
 
 ```python
-raise LoxReturnException(value)
+def evaluate(self, expr: Expr) -> Any:
+    return expr.accept(self)
+
+def execute(self, stmt: Stmt) -> Any:
+    return stmt.accept(self)
 ```
 
-La excepción es parte del control de flujo interno y es capturada por `LoxFunction`.
+Una declaración evalúa su inicializador y guarda el resultado en el entorno actual:
+
+```python
+def visit_var_decl(self, stmt: VarDecl) -> Any:
+    value = None
+    if stmt.initializer is not None:
+        value = self.evaluate(stmt.initializer)
+
+    self.environment.define(stmt.name.lexeme, value)
+    return None
+```
+
+Una operación binaria evalúa primero ambos operandos y luego aplica el operador con validación de tipos:
+
+```python
+def visit_binary_expr(self, expr: BinaryExpr) -> Any:
+    left = self.evaluate(expr.left)
+    right = self.evaluate(expr.right)
+
+    match expr.operator.token_type:
+        case TokenType.STAR:
+            self._check_number_operands(expr.operator, left, right)
+            return float(left) * float(right)
+
+        case TokenType.PLUS:
+            if self._is_number(left) and self._is_number(right):
+                return float(left) + float(right)
+            if isinstance(left, str) and isinstance(right, str):
+                return left + right
+            raise LoxRuntimeError(
+                "Los operandos deben ser dos números o dos cadenas de texto.",
+                token=expr.operator,
+            )
+```
+
+Para `var resultado = 2 + 3 * 4;`, el parser construye `2 + (3 * 4)`, el intérprete calcula primero `3 * 4`, luego suma `2` y finalmente guarda `resultado = 14`.
 
 ## Estructura del proyecto
 
@@ -695,4 +780,3 @@ La implementación pasa:
 
 | Todo OK |
 ```
-

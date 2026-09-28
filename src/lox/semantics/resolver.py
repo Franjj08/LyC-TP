@@ -32,11 +32,6 @@ class FunctionType(Enum):
 
 
 class Resolver(ExprVisitor, StmtVisitor):
-    """Analizador semántico que resuelve estáticamente las referencias de variables locales.
-
-    Calcula la distancia léxica (número de ámbitos hacia arriba) para cada acceso o asignación
-    a variables locales, y detecta errores semánticos como inicializaciones recursivas o return fuera de funciones.
-    """
 
     def __init__(self, interpreter: Any, diagnostics: Optional[DiagnosticReporter] = None):
         self.interpreter = interpreter
@@ -45,7 +40,6 @@ class Resolver(ExprVisitor, StmtVisitor):
         self.current_function: FunctionType = FunctionType.NONE
 
     def resolve(self, target: list[Stmt] | Stmt | Expr | None) -> None:
-        """Punto de entrada polimórfico para recorrer y resolver sentencias o expresiones."""
         if target is None:
             return
 
@@ -104,8 +98,6 @@ class Resolver(ExprVisitor, StmtVisitor):
         if self.diagnostics:
             self.diagnostics.report_error(token.line, where, message)
 
-    # ---------- Nodos de Sentencia (Stmt) ---------- #
-
     def visit_block_stmt(self, stmt: BlockStmt) -> Any:
         self._begin_scope()
         self.resolve(stmt.statements)
@@ -152,8 +144,6 @@ class Resolver(ExprVisitor, StmtVisitor):
         self.resolve(stmt.condition)
         self.resolve(stmt.body)
         return None
-
-    # ---------- Nodos de Expresión (Expr) ---------- #
 
     def visit_variable_expr(self, expr: VariableExpr) -> Any:
         if self.scopes and self.scopes[-1].get(expr.name.lexeme) is False:
