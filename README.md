@@ -269,18 +269,32 @@ Abrir el REPL:
 uv run pylox
 ```
 
-
 Inspeccionar los tokens:
 
 ```bash
-uv run pylox --scanner programa.lox
+uv run pylox --scanner example.lox
 ```
 
 Inspeccionar el AST:
 
 ```bash
-uv run pylox --ast programa.lox
+uv run pylox --ast example.lox
 ```
+
+### Programa de demostración: plan de ahorro
+
+[`programa.lox`](programa.lox) simula un plan de ahorro y calcula cuántos meses se necesitan para alcanzar una meta. Parte de un capital inicial, agrega un aporte mensual y aplica interés sobre el saldo acumulado.
+
+El ejemplo tiene un objetivo concreto y utiliza:
+
+- funciones con parámetros y valores de retorno;
+- una función anidada que conserva el aporte y la tasa mediante un *closure*;
+- variables globales y locales;
+- un ciclo `while` con un límite de meses;
+- condiciones con `if`, `else`, `and` y `or`;
+- operaciones aritméticas, comparación y módulo.
+
+Con los valores incluidos, el programa parte de `100000`, aporta `20000` por mes, aplica una tasa mensual del `1 %` y calcula cuándo alcanza la meta de `250000`. La meta se alcanza en el mes 7 con un saldo aproximado de `251484,24`.
 
 ## Comparación con la implementación de la cátedra
 
