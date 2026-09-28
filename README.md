@@ -676,22 +676,6 @@ La clase base `Expr` exige implementar `accept()`, y `ExprVisitor` define los m�
 
 La semántica de suma, resta, bucles y funciones permanece muy próxima. Lo que cambia es cómo se llega al código que implementa cada operación.
 
-El TP también centraliza los errores de ejecución:
-
-```python
-try:
-    for statement in statements:
-        self.execute(statement)
-except LoxRuntimeError as error:
-    self.diagnostics.report_runtime_error(error)
-```
-
-Y normaliza la salida mediante `stringify()`, por ejemplo mostrando `10` en lugar de `10.0`. La cátedra imprime directamente el objeto de Python:
-
-```python
-value = self.evaluate(statement.expression)
-print(value)
-```
 
 
 ## Benchmark: bucle grande
