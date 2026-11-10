@@ -45,6 +45,10 @@ class OpCode(IntEnum):
     OP_SET_UPVALUE = auto()
     OP_CALL = auto()
 
+    # Instrucciones de invocación directa de métodos (const_idx + arg_count)
+    OP_INVOKE = auto()
+    OP_SUPER_INVOKE = auto()
+
     # Instrucciones de salto con offset de 16 bits big-endian (2 bytes de operando)
     OP_JUMP = auto()
     OP_JUMP_IF_FALSE = auto()
@@ -121,6 +125,15 @@ class Chunk:
             ):
                 slot = self.code[offset + 1]
                 return offset + 2, f"{prefix}{op.name:<18} {slot:4d}"
+
+            case OpCode.OP_INVOKE | OpCode.OP_SUPER_INVOKE:
+                const_idx = self.code[offset + 1]
+                arg_count = self.code[offset + 2]
+                const_val = self.constants[const_idx]
+                return (
+                    offset + 3,
+                    f"{prefix}{op.name:<18} ({arg_count} args) {const_idx:4d} ({const_val!r})",
+                )
 
             case OpCode.OP_JUMP | OpCode.OP_JUMP_IF_FALSE | OpCode.OP_LOOP:
                 high = self.code[offset + 1]

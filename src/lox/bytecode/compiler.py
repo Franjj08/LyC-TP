@@ -598,6 +598,49 @@ class BytecodeCompiler(ExprVisitor, StmtVisitor):
 
     def visit_call_expr(self, expr: CallExpr) -> Any:
         self.current_line = expr.paren.line
+        if isinstance(expr.callee, GetExpr):
+            self.compile_expr(expr.callee.object)
+            for arg in expr.arguments:
+                self.compile_expr(arg)
+            name_const = self._identifier_constant(expr.callee.name.lexeme)
+            self._emit_bytes(OpCode.OP_INVOKE, name_const, expr.paren.line)
+            self._emit_byte(len(expr.arguments), expr.paren.line)
+            return None
+
+        if isinstance(expr.callee, SuperExpr):
+            sup = expr.callee
+            if self.current_class is None:
+                self._error(
+                    sup.keyword, "No se puede usar 'super' fuera de una clase."
+                )
+            elif not self.current_class.has_superclass:
+                self._error(
+                    sup.keyword,
+                    "No se puede usar 'super' en una clase sin superclase.",
+                )
+            this_token = Token(
+                token_type=TokenType.THIS,
+                lexeme="this",
+                literal=None,
+                line=sup.keyword.line,
+            )
+            super_token = Token(
+                token_type=TokenType.SUPER,
+                lexeme="super",
+                literal=None,
+                line=sup.keyword.line,
+            )
+            self._named_variable(this_token)
+            for arg in expr.arguments:
+                self.compile_expr(arg)
+            self._named_variable(super_token)
+            method_const = self._identifier_constant(sup.method.lexeme)
+            self._emit_bytes(
+                OpCode.OP_SUPER_INVOKE, method_const, expr.paren.line
+            )
+            self._emit_byte(len(expr.arguments), expr.paren.line)
+            return None
+
         self.compile_expr(expr.callee)
         for arg in expr.arguments:
             self.compile_expr(arg)

@@ -98,127 +98,52 @@ class VirtualMachine:
             raise
 
     def _execute(self) -> Any:
-        while self.frames:
-            frame = self.frames[-1]
-            chunk = frame.closure.function.chunk
-            code = chunk.code
-            constants = chunk.constants
+        stack = self.stack
+        push = stack.append
+        pop = stack.pop
+        frames = self.frames
+        globals_dict = self.globals
+        open_upvalues = self.open_upvalues
+        _missing = object()
 
-            op_offset = frame.ip
-            byte = code[frame.ip]
-            frame.ip += 1
+        frame = frames[-1]
+        code = frame.closure.function.chunk.code
+        constants = frame.closure.function.chunk.constants
+        ip = frame.ip
+        base_slot = frame.base_slot
+
+        while True:
+            op_offset = ip
+            byte = code[ip]
+            ip += 1
 
             match byte:
-                case OpCode.OP_CONSTANT:
-                    const_idx = code[frame.ip]
-                    frame.ip += 1
-                    self.push(constants[const_idx])
-
-                case OpCode.OP_NIL:
-                    self.push(None)
-
-                case OpCode.OP_TRUE:
-                    self.push(True)
-
-                case OpCode.OP_FALSE:
-                    self.push(False)
-
-                case OpCode.OP_POP:
-                    self.pop()
-
                 case OpCode.OP_GET_LOCAL:
-                    slot = code[frame.ip]
-                    frame.ip += 1
-                    self.push(self.stack[frame.base_slot + slot])
+                    push(stack[base_slot + code[ip]])
+                    ip += 1
 
                 case OpCode.OP_SET_LOCAL:
-                    slot = code[frame.ip]
-                    frame.ip += 1
-                    self.stack[frame.base_slot + slot] = self.peek(0)
+                    stack[base_slot + code[ip]] = stack[-1]
+                    ip += 1
 
-                case OpCode.OP_GET_GLOBAL:
-                    name = constants[code[frame.ip]]
-                    frame.ip += 1
-                    if name not in self.globals:
-                        self._error(f"Variable no definida '{name}'.", frame, op_offset)
-                    self.push(self.globals[name])
+                case OpCode.OP_CONSTANT:
+                    push(constants[code[ip]])
+                    ip += 1
 
-                case OpCode.OP_DEFINE_GLOBAL:
-                    name = constants[code[frame.ip]]
-                    frame.ip += 1
-                    self.globals[name] = self.pop()
-
-                case OpCode.OP_SET_GLOBAL:
-                    name = constants[code[frame.ip]]
-                    frame.ip += 1
-                    if name not in self.globals:
-                        self._error(f"Variable no definida '{name}'.", frame, op_offset)
-                    self.globals[name] = self.peek(0)
-
-                case OpCode.OP_GET_UPVALUE:
-                    slot = code[frame.ip]
-                    frame.ip += 1
-                    upvalue = frame.closure.upvalues[slot]
-                    if upvalue.location is not None:
-                        self.push(self.stack[upvalue.location])
-                    else:
-                        self.push(upvalue.closed)
-
-                case OpCode.OP_SET_UPVALUE:
-                    slot = code[frame.ip]
-                    frame.ip += 1
-                    upvalue = frame.closure.upvalues[slot]
-                    if upvalue.location is not None:
-                        self.stack[upvalue.location] = self.peek(0)
-                    else:
-                        upvalue.closed = self.peek(0)
-
-                case OpCode.OP_CLOSE_UPVALUE:
-                    self._close_upvalues(len(self.stack) - 1)
-                    self.pop()
-
-                case OpCode.OP_EQUAL:
-                    b = self.pop()
-                    a = self.pop()
-                    self.push(self._is_equal(a, b))
-
-                case OpCode.OP_BANG_EQUAL:
-                    b = self.pop()
-                    a = self.pop()
-                    self.push(not self._is_equal(a, b))
-
-                case OpCode.OP_GREATER:
-                    b = self.pop()
-                    a = self.pop()
-                    self._check_numbers(a, b, frame, op_offset)
-                    self.push(float(a) > float(b))
-
-                case OpCode.OP_GREATER_EQUAL:
-                    b = self.pop()
-                    a = self.pop()
-                    self._check_numbers(a, b, frame, op_offset)
-                    self.push(float(a) >= float(b))
-
-                case OpCode.OP_LESS:
-                    b = self.pop()
-                    a = self.pop()
-                    self._check_numbers(a, b, frame, op_offset)
-                    self.push(float(a) < float(b))
-
-                case OpCode.OP_LESS_EQUAL:
-                    b = self.pop()
-                    a = self.pop()
-                    self._check_numbers(a, b, frame, op_offset)
-                    self.push(float(a) <= float(b))
+                case OpCode.OP_POP:
+                    pop()
 
                 case OpCode.OP_ADD:
-                    b = self.pop()
-                    a = self.pop()
-                    if self._is_number(a) and self._is_number(b):
-                        self.push(float(a) + float(b))
-                    elif isinstance(a, str) and isinstance(b, str):
-                        self.push(a + b)
+                    b = pop()
+                    a = pop()
+                    ta = type(a)
+                    tb = type(b)
+                    if (ta is float or ta is int) and (tb is float or tb is int):
+                        push(a + b)
+                    elif ta is str and tb is str:
+                        push(a + b)
                     else:
+                        frame.ip = ip
                         self._error(
                             "Los operandos deben ser dos números o dos cadenas de texto.",
                             frame,
@@ -226,86 +151,221 @@ class VirtualMachine:
                         )
 
                 case OpCode.OP_SUBTRACT:
-                    b = self.pop()
-                    a = self.pop()
-                    self._check_numbers(a, b, frame, op_offset)
-                    self.push(float(a) - float(b))
+                    b = pop()
+                    a = pop()
+                    ta = type(a)
+                    tb = type(b)
+                    if (ta is float or ta is int) and (tb is float or tb is int):
+                        push(a - b)
+                    else:
+                        frame.ip = ip
+                        self._check_numbers(a, b, frame, op_offset)
 
                 case OpCode.OP_MULTIPLY:
-                    b = self.pop()
-                    a = self.pop()
-                    self._check_numbers(a, b, frame, op_offset)
-                    self.push(float(a) * float(b))
+                    b = pop()
+                    a = pop()
+                    ta = type(a)
+                    tb = type(b)
+                    if (ta is float or ta is int) and (tb is float or tb is int):
+                        push(a * b)
+                    else:
+                        frame.ip = ip
+                        self._check_numbers(a, b, frame, op_offset)
+
+                case OpCode.OP_MODULO:
+                    b = pop()
+                    a = pop()
+                    ta = type(a)
+                    tb = type(b)
+                    if (ta is float or ta is int) and (tb is float or tb is int):
+                        if b == 0.0:
+                            frame.ip = ip
+                            self._error("Módulo por cero.", frame, op_offset)
+                        push(a % b)
+                    else:
+                        frame.ip = ip
+                        self._check_numbers(a, b, frame, op_offset)
+
+                case OpCode.OP_LESS:
+                    b = pop()
+                    a = pop()
+                    ta = type(a)
+                    tb = type(b)
+                    if (ta is float or ta is int) and (tb is float or tb is int):
+                        push(a < b)
+                    else:
+                        frame.ip = ip
+                        self._check_numbers(a, b, frame, op_offset)
+
+                case OpCode.OP_GREATER:
+                    b = pop()
+                    a = pop()
+                    ta = type(a)
+                    tb = type(b)
+                    if (ta is float or ta is int) and (tb is float or tb is int):
+                        push(a > b)
+                    else:
+                        frame.ip = ip
+                        self._check_numbers(a, b, frame, op_offset)
+
+                case OpCode.OP_LESS_EQUAL:
+                    b = pop()
+                    a = pop()
+                    ta = type(a)
+                    tb = type(b)
+                    if (ta is float or ta is int) and (tb is float or tb is int):
+                        push(a <= b)
+                    else:
+                        frame.ip = ip
+                        self._check_numbers(a, b, frame, op_offset)
+
+                case OpCode.OP_GREATER_EQUAL:
+                    b = pop()
+                    a = pop()
+                    ta = type(a)
+                    tb = type(b)
+                    if (ta is float or ta is int) and (tb is float or tb is int):
+                        push(a >= b)
+                    else:
+                        frame.ip = ip
+                        self._check_numbers(a, b, frame, op_offset)
+
+                case OpCode.OP_JUMP_IF_FALSE:
+                    offset = (code[ip] << 8) | code[ip + 1]
+                    ip += 2
+                    top = stack[-1]
+                    if top is False or top is None:
+                        ip += offset
+
+                case OpCode.OP_JUMP:
+                    offset = (code[ip] << 8) | code[ip + 1]
+                    ip += 2 + offset
+
+                case OpCode.OP_LOOP:
+                    offset = (code[ip] << 8) | code[ip + 1]
+                    ip += 2 - offset
+
+                case OpCode.OP_GET_GLOBAL:
+                    name = constants[code[ip]]
+                    ip += 1
+                    if name in globals_dict:
+                        push(globals_dict[name])
+                    else:
+                        frame.ip = ip
+                        self._error(f"Variable no definida '{name}'.", frame, op_offset)
+
+                case OpCode.OP_SET_GLOBAL:
+                    name = constants[code[ip]]
+                    ip += 1
+                    if name in globals_dict:
+                        globals_dict[name] = stack[-1]
+                    else:
+                        frame.ip = ip
+                        self._error(f"Variable no definida '{name}'.", frame, op_offset)
+
+                case OpCode.OP_DEFINE_GLOBAL:
+                    name = constants[code[ip]]
+                    ip += 1
+                    globals_dict[name] = pop()
+
+                case OpCode.OP_NIL:
+                    push(None)
+
+                case OpCode.OP_TRUE:
+                    push(True)
+
+                case OpCode.OP_FALSE:
+                    push(False)
+
+                case OpCode.OP_GET_UPVALUE:
+                    slot = code[ip]
+                    ip += 1
+                    upvalue = frame.closure.upvalues[slot]
+                    if upvalue.location is not None:
+                        push(stack[upvalue.location])
+                    else:
+                        push(upvalue.closed)
+
+                case OpCode.OP_SET_UPVALUE:
+                    slot = code[ip]
+                    ip += 1
+                    upvalue = frame.closure.upvalues[slot]
+                    if upvalue.location is not None:
+                        stack[upvalue.location] = stack[-1]
+                    else:
+                        upvalue.closed = stack[-1]
+
+                case OpCode.OP_CLOSE_UPVALUE:
+                    self._close_upvalues(len(stack) - 1)
+                    pop()
+
+                case OpCode.OP_EQUAL:
+                    b = pop()
+                    a = pop()
+                    push(self._is_equal(a, b))
+
+                case OpCode.OP_BANG_EQUAL:
+                    b = pop()
+                    a = pop()
+                    push(not self._is_equal(a, b))
 
                 case OpCode.OP_DIVIDE:
-                    b = self.pop()
-                    a = self.pop()
+                    b = pop()
+                    a = pop()
+                    frame.ip = ip
                     self._check_numbers(a, b, frame, op_offset)
                     if float(b) == 0.0:
                         self._error("División por cero.", frame, op_offset)
-                    self.push(float(a) / float(b))
-
-                case OpCode.OP_MODULO:
-                    b = self.pop()
-                    a = self.pop()
-                    self._check_numbers(a, b, frame, op_offset)
-                    if float(b) == 0.0:
-                        self._error("Módulo por cero.", frame, op_offset)
-                    self.push(float(a) % float(b))
+                    push(float(a) / float(b))
 
                 case OpCode.OP_POWER:
-                    b = self.pop()
-                    a = self.pop()
+                    b = pop()
+                    a = pop()
+                    frame.ip = ip
                     self._check_numbers(a, b, frame, op_offset)
-                    self.push(float(a) ** float(b))
+                    push(float(a) ** float(b))
 
                 case OpCode.OP_NOT:
-                    self.push(not self._is_truthy(self.pop()))
+                    top = pop()
+                    push(top is False or top is None)
 
                 case OpCode.OP_NEGATE:
-                    val = self.pop()
+                    val = pop()
                     if not self._is_number(val):
+                        frame.ip = ip
                         self._error(
                             "El operando debe ser un número.", frame, op_offset
                         )
-                    self.push(-float(val))
+                    push(-float(val))
 
                 case OpCode.OP_PRINT:
-                    print(self.stringify(self.pop()))
-
-                case OpCode.OP_JUMP:
-                    offset = (code[frame.ip] << 8) | code[frame.ip + 1]
-                    frame.ip += 2 + offset
-
-                case OpCode.OP_JUMP_IF_FALSE:
-                    offset = (code[frame.ip] << 8) | code[frame.ip + 1]
-                    frame.ip += 2
-                    if not self._is_truthy(self.peek(0)):
-                        frame.ip += offset
-
-                case OpCode.OP_LOOP:
-                    offset = (code[frame.ip] << 8) | code[frame.ip + 1]
-                    frame.ip += 2 - offset
+                    print(self.stringify(pop()))
 
                 case OpCode.OP_CALL:
-                    arg_count = code[frame.ip]
-                    frame.ip += 1
-                    callee = self.peek(arg_count)
+                    arg_count = code[ip]
+                    ip += 1
+                    frame.ip = ip
+                    callee = stack[-1 - arg_count]
                     self._call_value(callee, arg_count, frame, op_offset)
+                    frame = frames[-1]
+                    code = frame.closure.function.chunk.code
+                    constants = frame.closure.function.chunk.constants
+                    ip = frame.ip
+                    base_slot = frame.base_slot
 
                 case OpCode.OP_CLOSURE:
-                    const_idx = code[frame.ip]
-                    frame.ip += 1
+                    const_idx = code[ip]
+                    ip += 1
                     fn_obj: ObjFunction = constants[const_idx]
                     closure = ObjClosure(fn_obj)
-                    self.push(closure)
+                    push(closure)
                     for _ in range(fn_obj.upvalue_count):
-                        is_local = code[frame.ip]
-                        index = code[frame.ip + 1]
-                        frame.ip += 2
+                        is_local = code[ip]
+                        index = code[ip + 1]
+                        ip += 2
                         if is_local:
                             closure.upvalues.append(
-                                self._capture_upvalue(frame.base_slot + index)
+                                self._capture_upvalue(base_slot + index)
                             )
                         else:
                             closure.upvalues.append(
@@ -313,14 +373,15 @@ class VirtualMachine:
                             )
 
                 case OpCode.OP_CLASS:
-                    name = constants[code[frame.ip]]
-                    frame.ip += 1
-                    self.push(ObjClass(name))
+                    name = constants[code[ip]]
+                    ip += 1
+                    push(ObjClass(name))
 
                 case OpCode.OP_INHERIT:
-                    subclass = self.pop()
-                    superclass = self.peek(0)
+                    subclass = pop()
+                    superclass = stack[-1]
                     if not isinstance(superclass, ObjClass):
+                        frame.ip = ip
                         self._error(
                             "La superclase debe ser una clase.", frame, op_offset
                         )
@@ -328,91 +389,148 @@ class VirtualMachine:
                     subclass.methods.update(superclass.methods)
 
                 case OpCode.OP_METHOD:
-                    name = constants[code[frame.ip]]
-                    frame.ip += 1
-                    method = self.pop()
-                    klass = self.peek(0)
+                    name = constants[code[ip]]
+                    ip += 1
+                    method = pop()
+                    klass = stack[-1]
                     assert isinstance(klass, ObjClass) and isinstance(
                         method, ObjClosure
                     )
                     klass.methods[name] = method
 
                 case OpCode.OP_GET_PROPERTY:
-                    name = constants[code[frame.ip]]
-                    frame.ip += 1
-                    instance = self.peek(0)
+                    name = constants[code[ip]]
+                    ip += 1
+                    instance = stack[-1]
                     if not isinstance(instance, ObjInstance):
+                        frame.ip = ip
                         self._error(
                             "Solo las instancias tienen propiedades.",
                             frame,
                             op_offset,
                         )
-                    if name in instance.fields:
-                        value = instance.fields[name]
-                        self.pop()
-                        self.push(value)
-                    elif name in instance.klass.methods:
-                        bound = ObjBoundMethod(
+                    val = instance.fields.get(name, _missing)
+                    if val is not _missing:
+                        stack[-1] = val
+                    elif (method := instance.klass.methods.get(name)) is not None:
+                        stack[-1] = ObjBoundMethod(
                             receiver=instance,
-                            method=instance.klass.methods[name],
+                            method=method,
                         )
-                        self.pop()
-                        self.push(bound)
                     else:
+                        frame.ip = ip
                         self._error(
                             f"Propiedad no definida '{name}'.", frame, op_offset
                         )
 
                 case OpCode.OP_SET_PROPERTY:
-                    name = constants[code[frame.ip]]
-                    frame.ip += 1
-                    instance = self.peek(1)
+                    name = constants[code[ip]]
+                    ip += 1
+                    instance = stack[-2]
                     if not isinstance(instance, ObjInstance):
+                        frame.ip = ip
                         self._error(
                             "Solo las instancias tienen campos.",
                             frame,
                             op_offset,
                         )
-                    value = self.pop()
-                    self.pop()
+                    value = pop()
                     instance.fields[name] = value
-                    self.push(value)
+                    stack[-1] = value
 
                 case OpCode.OP_GET_SUPER:
-                    name = constants[code[frame.ip]]
-                    frame.ip += 1
-                    superclass = self.pop()
-                    receiver = self.pop()
+                    name = constants[code[ip]]
+                    ip += 1
+                    superclass = pop()
+                    receiver = pop()
                     assert isinstance(superclass, ObjClass) and isinstance(
                         receiver, ObjInstance
                     )
                     method = superclass.methods.get(name)
                     if method is None:
+                        frame.ip = ip
                         self._error(
                             f"Propiedad no definida '{name}'.", frame, op_offset
                         )
-                    self.push(ObjBoundMethod(receiver=receiver, method=method))
+                    push(ObjBoundMethod(receiver=receiver, method=method))
+
+                case OpCode.OP_INVOKE:
+                    name = constants[code[ip]]
+                    arg_count = code[ip + 1]
+                    ip += 2
+                    frame.ip = ip
+                    receiver = stack[-1 - arg_count]
+                    if not isinstance(receiver, ObjInstance):
+                        self._error(
+                            "Solo las instancias tienen propiedades.",
+                            frame,
+                            op_offset,
+                        )
+                    val = receiver.fields.get(name, _missing)
+                    if val is not _missing:
+                        stack[-1 - arg_count] = val
+                        self._call_value(val, arg_count, frame, op_offset)
+                    else:
+                        method = receiver.klass.methods.get(name)
+                        if method is None:
+                            self._error(
+                                f"Propiedad no definida '{name}'.",
+                                frame,
+                                op_offset,
+                            )
+                        self._call_closure(method, arg_count, frame, op_offset)
+                    frame = frames[-1]
+                    code = frame.closure.function.chunk.code
+                    constants = frame.closure.function.chunk.constants
+                    ip = frame.ip
+                    base_slot = frame.base_slot
+
+                case OpCode.OP_SUPER_INVOKE:
+                    name = constants[code[ip]]
+                    arg_count = code[ip + 1]
+                    ip += 2
+                    frame.ip = ip
+                    superclass = pop()
+                    assert isinstance(superclass, ObjClass)
+                    method = superclass.methods.get(name)
+                    if method is None:
+                        self._error(
+                            f"Propiedad no definida '{name}'.",
+                            frame,
+                            op_offset,
+                        )
+                    self._call_closure(method, arg_count, frame, op_offset)
+                    frame = frames[-1]
+                    code = frame.closure.function.chunk.code
+                    constants = frame.closure.function.chunk.constants
+                    ip = frame.ip
+                    base_slot = frame.base_slot
 
                 case OpCode.OP_RETURN:
-                    result = self.pop()
-                    finished_frame = self.frames.pop()
-                    self._close_upvalues(finished_frame.base_slot)
+                    result = pop()
+                    finished_frame = frames.pop()
+                    if open_upvalues:
+                        self._close_upvalues(finished_frame.base_slot)
 
-                    if not self.frames:
-                        self.stack.clear()
+                    if not frames:
+                        stack.clear()
                         return result
 
-                    del self.stack[finished_frame.base_slot :]
-                    self.push(result)
+                    del stack[finished_frame.base_slot :]
+                    push(result)
+                    frame = frames[-1]
+                    code = frame.closure.function.chunk.code
+                    constants = frame.closure.function.chunk.constants
+                    ip = frame.ip
+                    base_slot = frame.base_slot
 
                 case _:
+                    frame.ip = ip
                     self._error(
                         f"Instrucción de bytecode desconocida: {byte}",
                         frame,
                         op_offset,
                     )
-
-        return None
 
     # ---------- Invocación y Upvalues ---------- #
 

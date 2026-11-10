@@ -1,0 +1,27 @@
+class Entidad {
+    init(base) {
+        this.energia = base;
+    }
+    actualizar(paso) {
+        this.energia = this.energia + paso;
+        return this.energia;
+    }
+}
+
+class Unidad < Entidad {
+    init(base, factor) {
+        super.init(base);
+        this.factor = factor;
+    }
+    actualizar(paso) {
+        return super.actualizar(paso * this.factor);
+    }
+}
+
+var u = Unidad(0, 2);
+var total = 0;
+for (var i = 0; i < 100000; i = i + 1) {
+    total = total + u.actualizar(1);
+}
+print total;
+
