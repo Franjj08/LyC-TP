@@ -202,3 +202,23 @@ def test_vm_parity_with_tree_walk_on_real_tests(filename: str, capsys):
     assert not cli_tw.diagnostics.had_error
     assert not cli_vm.diagnostics.had_error
     assert out_vm == out_tw
+
+
+def test_showcase_example_clash_royale_parity(capsys):
+    example_file = (
+        Path(__file__).resolve().parent.parent / "examples" / "clash_royale.lox"
+    )
+    source = example_file.read_text(encoding="utf-8")
+
+    cli_tw = LoxCLI(use_vm=False)
+    cli_tw.run(source, is_repl=False)
+    out_tw, _ = capsys.readouterr()
+
+    cli_vm = LoxCLI(use_vm=True)
+    cli_vm.run(source, is_repl=False)
+    out_vm, _ = capsys.readouterr()
+
+    assert not cli_tw.diagnostics.had_error
+    assert not cli_vm.diagnostics.had_error
+    assert "=== ARENA CLASH ROYALE & LADDER EN LOX ===" in out_vm
+    assert out_vm == out_tw

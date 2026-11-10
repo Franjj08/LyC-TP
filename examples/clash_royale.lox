@@ -1,0 +1,300 @@
+// ============================================================================
+// CASO DE USO COMPLEJO EN LOX:
+// Simulador de Arena Clash Royale + TV Royale & Ladder de Trofeos (BST)
+//
+// Demuestra en conjunto:
+// 1. OOP: Clases, instancias, propiedades, init(), this, herencia de 3 niveles (<)
+//    y despacho a superclase (super.init / super.atacar).
+// 2. Closures y Funciones de Orden Superior: Generador pseudoaleatorio (LCG)
+//    con semilla capturada en upvalues, más recorrer/reducir sobre ListaEnlazada.
+// 3. Features Extra (Etapa C): Operadores de asignación compuesta (+=, -=, *=, /=)
+//    y operador de potencia (**) para escalado de cartas por nivel y rayo infernal.
+// ============================================================================
+
+// --- 1. Closure: Generador Pseudoaleatorio de Cofres y Críticos (LCG) ---
+fun crear_rng(semilla_inicial) {
+    var estado = semilla_inicial;
+
+    fun siguiente(maximo) {
+        estado = (estado * 1103515245 + 12345) % 65536;
+        if (estado < 0) {
+            estado = -estado;
+        }
+        return estado % maximo;
+    }
+
+    return siguiente;
+}
+
+// --- 2. Estructura de Datos OOP: Lista Enlazada (Registro de TV Royale) ---
+class NodoPartida {
+    init(valor, sig) {
+        this.valor = valor;
+        this.sig = sig;
+    }
+}
+
+class ListaTVRoyale {
+    init() {
+        this.cabeza = nil;
+        this.cantidad = 0;
+    }
+
+    agregar(valor) {
+        var nuevo = NodoPartida(valor, nil);
+        if (this.cabeza == nil) {
+            this.cabeza = nuevo;
+        } else {
+            var actual = this.cabeza;
+            while (actual.sig != nil) {
+                actual = actual.sig;
+            }
+            actual.sig = nuevo;
+        }
+        this.cantidad += 1;
+    }
+
+    recorrer(accion) {
+        var actual = this.cabeza;
+        while (actual != nil) {
+            accion(actual.valor);
+            actual = actual.sig;
+        }
+    }
+
+    reducir(acumulador_inicial, combinador) {
+        var acc = acumulador_inicial;
+        var actual = this.cabeza;
+        while (actual != nil) {
+            acc = combinador(acc, actual.valor);
+            actual = actual.sig;
+        }
+        return acc;
+    }
+}
+
+// --- 3. Estructura de Datos OOP: Árbol Binario de Búsqueda (Ladder de Trofeos) ---
+class NodoLadder {
+    init(trofeos, nombre) {
+        this.trofeos = trofeos;
+        this.nombre = nombre;
+        this.izq = nil;
+        this.der = nil;
+    }
+}
+
+class LadderTrofeosBST {
+    init() {
+        this.raiz = nil;
+    }
+
+    insertar(trofeos, nombre) {
+        this.raiz = this._insertar_rec(this.raiz, trofeos, nombre);
+    }
+
+    _insertar_rec(nodo, trofeos, nombre) {
+        if (nodo == nil) {
+            return NodoLadder(trofeos, nombre);
+        }
+        if (trofeos > nodo.trofeos) {
+            nodo.izq = this._insertar_rec(nodo.izq, trofeos, nombre);
+        } else {
+            nodo.der = this._insertar_rec(nodo.der, trofeos, nombre);
+        }
+        return nodo;
+    }
+
+    imprimir_ranking() {
+        this._inorden_desc(this.raiz);
+    }
+
+    _inorden_desc(nodo) {
+        if (nodo == nil) return;
+        this._inorden_desc(nodo.izq);
+        print "  [Liga] " + nodo.nombre + " -> Trofeos: ";
+        print nodo.trofeos;
+        this._inorden_desc(nodo.der);
+    }
+}
+
+// --- 4. Jerarquía de Cartas de Clash Royale (3 niveles de herencia) ---
+class Carta {
+    init(nombre, costo_elixir, vida_max, danio_base, nivel) {
+        this.nombre = nombre;
+        this.costo_elixir = costo_elixir;
+        this.vida_max = vida_max;
+        this.vida = vida_max;
+        this.danio_base = danio_base;
+        this.nivel = nivel;
+        this.coronas = 0;
+        this.danio_acumulado = 0;
+    }
+
+    esta_viva() {
+        return this.vida > 0;
+    }
+
+    desplegar_en_arena() {
+        this.vida = this.vida_max;
+    }
+
+    bono_nivel_elite() {
+        // Escalado exponencial de nivel de carta usando potencia (**)
+        return 2 ** this.nivel;
+    }
+
+    recibir_danio(cantidad) {
+        this.vida -= cantidad;
+        if (this.vida < 0) {
+            this.vida = 0;
+        }
+    }
+
+    atacar(objetivo, rng) {
+        var critico = rng(5);
+        var golpe = this.danio_base + this.bono_nivel_elite() + critico;
+        objetivo.recibir_danio(golpe);
+        this.danio_acumulado += golpe;
+        return golpe;
+    }
+}
+
+class TropaTerrestre < Carta {
+    init(nombre, costo_elixir, vida_max, danio_base, nivel) {
+        super.init(nombre, costo_elixir, vida_max, danio_base, nivel);
+        this.pasos_carga = 0;
+    }
+
+    desplegar_en_arena() {
+        super.desplegar_en_arena();
+        this.pasos_carga = 0;
+    }
+
+    atacar(objetivo, rng) {
+        this.pasos_carga += 1;
+        var golpe = super.atacar(objetivo, rng);
+        // Embestida del Príncipe / P.E.K.K.A. al cargar en el puente
+        if (this.pasos_carga >= 2) {
+            var embestida = 2 ** (this.nivel + 1);
+            objetivo.recibir_danio(embestida);
+            this.danio_acumulado += embestida;
+            golpe += embestida;
+            this.pasos_carga = 0;
+        }
+        return golpe;
+    }
+}
+
+// Herencia de 3er nivel: CampeonReal < TropaTerrestre < Carta
+class CampeonReal < TropaTerrestre {
+    init(nombre, costo_elixir, vida_max, danio_base, nivel, bonus_habilidad) {
+        super.init(nombre, costo_elixir, vida_max, danio_base, nivel);
+        this.bonus_habilidad = bonus_habilidad;
+    }
+
+    atacar(objetivo, rng) {
+        var golpe = super.atacar(objetivo, rng);
+        // Habilidad de Campeón (recupera vida al impactar en el puente)
+        var escudo = this.bonus_habilidad * 2;
+        this.vida += escudo;
+        if (this.vida > this.vida_max) {
+            this.vida = this.vida_max;
+        }
+        return golpe;
+    }
+}
+
+class TropaInfernal < Carta {
+    init(nombre, costo_elixir, vida_max, danio_base, nivel, elixir_reserva) {
+        super.init(nombre, costo_elixir, vida_max, danio_base, nivel);
+        this.elixir_max = elixir_reserva;
+        this.elixir = elixir_reserva;
+    }
+
+    desplegar_en_arena() {
+        super.desplegar_en_arena();
+        this.elixir = this.elixir_max;
+    }
+
+    atacar(objetivo, rng) {
+        if (this.elixir >= 15) {
+            this.elixir -= 15;
+            // Rayo infernal que escala exponencialmente con 3 ** nivel
+            var rayo_infernal = 3 ** this.nivel + rng(6);
+            var golpe = this.danio_base + rayo_infernal;
+            objetivo.recibir_danio(golpe);
+            this.danio_acumulado += golpe;
+            return golpe;
+        }
+        // Recarga de Elixir x2 y golpe básico con super
+        this.elixir += 10;
+        return super.atacar(objetivo, rng);
+    }
+}
+
+// --- 5. Simulación de Batalla en la Arena ---
+fun simular_batalla_arena(carta_azul, carta_roja, rng) {
+    carta_azul.desplegar_en_arena();
+    carta_roja.desplegar_en_arena();
+
+    var turnos = 0;
+    while (carta_azul.esta_viva() and carta_roja.esta_viva() and turnos < 20) {
+        turnos += 1;
+        carta_azul.atacar(carta_roja, rng);
+        if (carta_roja.esta_viva()) {
+            carta_roja.atacar(carta_azul, rng);
+        }
+    }
+
+    if (carta_azul.vida >= carta_roja.vida) {
+        carta_azul.coronas += 3;
+        return carta_azul.nombre + " derribo la Torre del Rey de " + carta_roja.nombre + " (3 Coronas)";
+    } else {
+        carta_roja.coronas += 3;
+        return carta_roja.nombre + " derribo la Torre del Rey de " + carta_azul.nombre + " (3 Coronas)";
+    }
+}
+
+print "=== ARENA CLASH ROYALE & LADDER EN LOX ===";
+
+var rng = crear_rng(42);
+
+var caballero_dorado = CampeonReal("Caballero Dorado (Campeon)", 4, 120, 14, 2, 4);
+var pekka = TropaTerrestre("P.E.K.K.A (Epica)", 7, 135, 16, 2);
+var dragon_infernal = TropaInfernal("Dragon Infernal (Legendaria)", 4, 95, 12, 3, 45);
+
+var tv_royale = ListaTVRoyale();
+tv_royale.agregar(simular_batalla_arena(caballero_dorado, pekka, rng));
+tv_royale.agregar(simular_batalla_arena(dragon_infernal, pekka, rng));
+tv_royale.agregar(simular_batalla_arena(caballero_dorado, dragon_infernal, rng));
+
+print "--- Repeticiones de TV Royale ---";
+fun imprimir_repeticion(resultado) {
+    print "  [Arena] " + resultado;
+}
+tv_royale.recorrer(imprimir_repeticion);
+
+var mazo_torneo = ListaTVRoyale();
+mazo_torneo.agregar(caballero_dorado);
+mazo_torneo.agregar(pekka);
+mazo_torneo.agregar(dragon_infernal);
+
+fun sumar_danio_torres(acum, carta) {
+    return acum + carta.danio_acumulado;
+}
+
+var danio_total_arena = mazo_torneo.reducir(0, sumar_danio_torres);
+print "--- Danio Total a las Torres ---";
+print danio_total_arena;
+
+var ladder = LadderTrofeosBST();
+fun registrar_en_ladder(carta) {
+    var trofeos = carta.coronas * 300 + carta.danio_acumulado;
+    ladder.insertar(trofeos, carta.nombre);
+}
+mazo_torneo.recorrer(registrar_en_ladder);
+
+print "--- Ranking de Trofeos (Ordenado con BST) ---";
+ladder.imprimir_ranking();
+print "=== FIN DE LA TEMPORADA ===";
+
