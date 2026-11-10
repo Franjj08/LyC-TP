@@ -12,6 +12,10 @@ from lox.syntax.ast import (
     AssignmentExpr,
     LogicalExpr,
     CallExpr,
+    GetExpr,
+    SetExpr,
+    ThisExpr,
+    SuperExpr,
     Stmt,
     StmtVisitor,
     ExpressionStmt,
@@ -22,6 +26,7 @@ from lox.syntax.ast import (
     WhileStmt,
     FunDecl,
     ReturnStmt,
+    ClassDecl,
 )
 from lox.errors import DiagnosticReporter
 
@@ -29,6 +34,14 @@ from lox.errors import DiagnosticReporter
 class FunctionType(Enum):
     NONE = auto()
     FUNCTION = auto()
+    INITIALIZER = auto()
+    METHOD = auto()
+
+
+class ClassType(Enum):
+    NONE = auto()
+    CLASS = auto()
+    SUBCLASS = auto()
 
 
 class Resolver(ExprVisitor, StmtVisitor):
@@ -38,6 +51,7 @@ class Resolver(ExprVisitor, StmtVisitor):
         self.diagnostics = diagnostics
         self.scopes: list[dict[str, bool]] = []
         self.current_function: FunctionType = FunctionType.NONE
+        self.current_class: ClassType = ClassType.NONE
 
     def resolve(self, target: list[Stmt] | Stmt | Expr | None) -> None:
         if target is None:
@@ -117,6 +131,41 @@ class Resolver(ExprVisitor, StmtVisitor):
         self._resolve_function(stmt, FunctionType.FUNCTION)
         return None
 
+    def visit_class_decl(self, stmt: ClassDecl) -> Any:
+        enclosing_class = self.current_class
+        self.current_class = ClassType.CLASS
+
+        self._declare(stmt.name)
+        self._define(stmt.name)
+
+        if stmt.superclass is not None:
+            self.current_class = ClassType.SUBCLASS
+            if stmt.name.lexeme == stmt.superclass.name.lexeme:
+                self._error(stmt.superclass.name, "Una clase no puede heredar de sí misma.")
+            self.resolve(stmt.superclass)
+
+            self._begin_scope()
+            self.scopes[-1]["super"] = True
+
+        self._begin_scope()
+        self.scopes[-1]["this"] = True
+
+        for method in stmt.methods:
+            declaration = (
+                FunctionType.INITIALIZER
+                if method.name.lexeme == "init"
+                else FunctionType.METHOD
+            )
+            self._resolve_function(method, declaration)
+
+        self._end_scope()
+
+        if stmt.superclass is not None:
+            self._end_scope()
+
+        self.current_class = enclosing_class
+        return None
+
     def visit_expression_stmt(self, stmt: ExpressionStmt) -> Any:
         self.resolve(stmt.expression)
         return None
@@ -137,6 +186,8 @@ class Resolver(ExprVisitor, StmtVisitor):
             self._error(stmt.keyword, "No se puede retornar desde código de nivel superior.")
 
         if stmt.value is not None:
+            if self.current_function == FunctionType.INITIALIZER:
+                self._error(stmt.keyword, "No se puede retornar un valor desde un inicializador.")
             self.resolve(stmt.value)
         return None
 
@@ -182,4 +233,30 @@ class Resolver(ExprVisitor, StmtVisitor):
 
     def visit_unary_expr(self, expr: UnaryExpr) -> Any:
         self.resolve(expr.right)
+        return None
+
+    def visit_get_expr(self, expr: GetExpr) -> Any:
+        self.resolve(expr.object)
+        return None
+
+    def visit_set_expr(self, expr: SetExpr) -> Any:
+        self.resolve(expr.value)
+        self.resolve(expr.object)
+        return None
+
+    def visit_this_expr(self, expr: ThisExpr) -> Any:
+        if self.current_class == ClassType.NONE:
+            self._error(expr.keyword, "No se puede usar 'this' fuera de una clase.")
+            return None
+
+        self._resolve_local(expr, expr.keyword)
+        return None
+
+    def visit_super_expr(self, expr: SuperExpr) -> Any:
+        if self.current_class == ClassType.NONE:
+            self._error(expr.keyword, "No se puede usar 'super' fuera de una clase.")
+        elif self.current_class != ClassType.SUBCLASS:
+            self._error(expr.keyword, "No se puede usar 'super' en una clase sin superclase.")
+
+        self._resolve_local(expr, expr.keyword)
         return None

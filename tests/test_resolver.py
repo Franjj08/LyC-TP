@@ -92,6 +92,61 @@ def test_error_return_from_top_level():
     assert diagnostics.had_error
 
 
+@pytest.mark.parametrize(
+    "code",
+    [
+        "print this;",
+        "fun f() { print this; }",
+        "class A < A {}",
+        "class A { init() { return 123; } }",
+        "print super.foo();",
+        "class A { m() { super.foo(); } }",
+    ],
+)
+def test_oop_static_resolution_errors(code: str):
+    diagnostics = DiagnosticReporter()
+    scanner = Scanner(code, diagnostics=diagnostics)
+    tokens = scanner.scan_tokens()
+    parser = Parser(tokens, diagnostics=diagnostics)
+    statements = parser.parse()
+
+    interp = Interpreter(diagnostics=diagnostics)
+    resolver = Resolver(interp, diagnostics=diagnostics)
+    resolver.resolve(statements)
+
+    assert diagnostics.had_error
+
+
+def test_oop_valid_resolution():
+    code = """
+    class Base {
+        hablar() {
+            return "hola";
+        }
+    }
+    class Sub < Base {
+        init(x) {
+            this.x = x;
+            return;
+        }
+        hablar() {
+            return super.hablar() + this.x;
+        }
+    }
+    """
+    diagnostics = DiagnosticReporter()
+    scanner = Scanner(code, diagnostics=diagnostics)
+    tokens = scanner.scan_tokens()
+    parser = Parser(tokens, diagnostics=diagnostics)
+    statements = parser.parse()
+
+    interp = Interpreter(diagnostics=diagnostics)
+    resolver = Resolver(interp, diagnostics=diagnostics)
+    resolver.resolve(statements)
+
+    assert not diagnostics.had_error
+
+
 def test_real_test_2_functions(capsys):
     test_file = Path(__file__).resolve().parent / "real_tests/2-functions.lox"
     assert test_file.exists()

@@ -1,4 +1,4 @@
 
-from lox.semantics.resolver import Resolver, FunctionType
+from lox.semantics.resolver import Resolver, FunctionType, ClassType
 
-__all__ = ["Resolver", "FunctionType"]
+__all__ = ["Resolver", "FunctionType", "ClassType"]
