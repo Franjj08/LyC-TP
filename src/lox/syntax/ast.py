@@ -47,15 +47,19 @@ class ExprVisitor(ABC):
     def visit_call_expr(self, expr: "CallExpr") -> Any:
         pass
 
+    @abstractmethod
     def visit_get_expr(self, expr: "GetExpr") -> Any:
         pass
 
+    @abstractmethod
     def visit_set_expr(self, expr: "SetExpr") -> Any:
         pass
 
+    @abstractmethod
     def visit_this_expr(self, expr: "ThisExpr") -> Any:
         pass
 
+    @abstractmethod
     def visit_super_expr(self, expr: "SuperExpr") -> Any:
         pass
 
@@ -264,6 +268,7 @@ class StmtVisitor(ABC):
     def visit_return_stmt(self, stmt: "ReturnStmt") -> Any:
         pass
 
+    @abstractmethod
     def visit_class_decl(self, stmt: "ClassDecl") -> Any:
         pass
 

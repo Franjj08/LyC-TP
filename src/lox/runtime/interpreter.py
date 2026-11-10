@@ -10,6 +10,10 @@ from lox.syntax.ast import (
     AssignmentExpr,
     LogicalExpr,
     CallExpr,
+    GetExpr,
+    SetExpr,
+    ThisExpr,
+    SuperExpr,
     Stmt,
     StmtVisitor,
     ExpressionStmt,
@@ -20,11 +24,12 @@ from lox.syntax.ast import (
     WhileStmt,
     FunDecl,
     ReturnStmt,
+    ClassDecl,
 )
 from lox.syntax.token import Token, TokenType
 from lox.errors import DiagnosticReporter, LoxRuntimeError, LoxReturnException
 from lox.runtime.environment import Environment
-from lox.runtime.callable import LoxCallable, LoxFunction
+from lox.runtime.callable import LoxCallable, LoxFunction, LoxClass, LoxInstance
 
 
 class Interpreter(ExprVisitor, StmtVisitor):
@@ -114,8 +119,51 @@ class Interpreter(ExprVisitor, StmtVisitor):
         return None
 
     def visit_fun_decl(self, stmt: FunDecl) -> Any:
-        function = LoxFunction(declaration=stmt, closure=self.environment)
+        function = LoxFunction(
+            declaration=stmt,
+            closure=self.environment,
+            is_initializer=False,
+        )
         self.environment.define(stmt.name.lexeme, function)
+        return None
+
+    def visit_class_decl(self, stmt: ClassDecl) -> Any:
+        superclass: Optional[LoxClass] = None
+        if stmt.superclass is not None:
+            evaluated_super = self.evaluate(stmt.superclass)
+            if not isinstance(evaluated_super, LoxClass):
+                raise LoxRuntimeError(
+                    "La superclase debe ser una clase.",
+                    token=stmt.superclass.name,
+                )
+            superclass = evaluated_super
+
+        self.environment.define(stmt.name.lexeme, None)
+
+        if stmt.superclass is not None:
+            self.environment = Environment(enclosing=self.environment)
+            self.environment.define("super", superclass)
+
+        methods: dict[str, LoxFunction] = {}
+        for method in stmt.methods:
+            function = LoxFunction(
+                declaration=method,
+                closure=self.environment,
+                is_initializer=(method.name.lexeme == "init"),
+            )
+            methods[method.name.lexeme] = function
+
+        klass = LoxClass(
+            name=stmt.name.lexeme,
+            superclass=superclass,
+            methods=methods,
+        )
+
+        if superclass is not None:
+            assert self.environment.enclosing is not None
+            self.environment = self.environment.enclosing
+
+        self.environment.assign(stmt.name, klass)
         return None
 
     def visit_return_stmt(self, stmt: ReturnStmt) -> Any:
@@ -252,6 +300,48 @@ class Interpreter(ExprVisitor, StmtVisitor):
         else:
             self.globals.assign(expr.name, value)
         return value
+
+    def visit_get_expr(self, expr: GetExpr) -> Any:
+        obj = self.evaluate(expr.object)
+        if isinstance(obj, LoxInstance):
+            return obj.get(expr.name)
+
+        raise LoxRuntimeError(
+            "Solo las instancias tienen propiedades.",
+            token=expr.name,
+        )
+
+    def visit_set_expr(self, expr: SetExpr) -> Any:
+        obj = self.evaluate(expr.object)
+        if not isinstance(obj, LoxInstance):
+            raise LoxRuntimeError(
+                "Solo las instancias tienen campos.",
+                token=expr.name,
+            )
+
+        value = self.evaluate(expr.value)
+        obj.set(expr.name, value)
+        return value
+
+    def visit_this_expr(self, expr: ThisExpr) -> Any:
+        return self._look_up_variable(expr.keyword, expr)
+
+    def visit_super_expr(self, expr: SuperExpr) -> Any:
+        distance = self.locals[id(expr)]
+        superclass = self.environment.get_at(distance, "super")
+        object_instance = self.environment.get_at(distance - 1, "this")
+
+        assert isinstance(superclass, LoxClass)
+        assert isinstance(object_instance, LoxInstance)
+
+        method = superclass.find_method(expr.method.lexeme)
+        if method is None:
+            raise LoxRuntimeError(
+                f"Propiedad no definida '{expr.method.lexeme}'.",
+                token=expr.method,
+            )
+
+        return method.bind(object_instance)
 
     def _is_truthy(self, value: Any) -> bool:
         if value is None:
