@@ -16,14 +16,24 @@ from lox.syntax.ast import (
 )
 from lox.runtime import Interpreter
 from lox.semantics import Resolver
+from lox.bytecode import BytecodeCompiler, VirtualMachine
 
 
 class LoxCLI:
-    def __init__(self, scanner_mode: bool = False, ast_mode: bool = False):
+    def __init__(
+        self,
+        scanner_mode: bool = False,
+        ast_mode: bool = False,
+        bytecode_mode: bool = False,
+        use_vm: bool = True,
+    ):
         self.diagnostics = DiagnosticReporter()
         self.scanner_mode = scanner_mode
         self.ast_mode = ast_mode
+        self.bytecode_mode = bytecode_mode
+        self.use_vm = use_vm
         self.interpreter = Interpreter(diagnostics=self.diagnostics)
+        self.vm = VirtualMachine(diagnostics=self.diagnostics)
 
     def run_file(self, path: str) -> None:
         file_path = Path(path)
@@ -48,8 +58,13 @@ class LoxCLI:
             print("Lox Parser (Modo AST)")
             print("Escribe expresiones para ver su árbol sintáctico. Escribe 'exit' o presiona Ctrl+D para salir.\n")
             prompt_str = "lox (ast)> "
+        elif self.bytecode_mode:
+            print("Lox Bytecode Compiler (Modo Disassembler)")
+            print("Escribe código para ver su bytecode. Escribe 'exit' o presiona Ctrl+D para salir.\n")
+            prompt_str = "lox (bytecode)> "
         else:
-            print("Lox Tree-Walk Interpreter (REPL)")
+            engine_label = "Bytecode VM" if self.use_vm else "Tree-Walk Interpreter"
+            print(f"Lox {engine_label} (REPL)")
             print("Escribe 'exit' o presiona Ctrl+D para salir. Los bloques pueden ocupar varias líneas.\n")
             prompt_str = "lox> "
 
@@ -162,6 +177,26 @@ class LoxCLI:
                     print(f"(class {stmt.name.lexeme}{super_str} ...)")
             return statements
 
+        if self.bytecode_mode:
+            compiler = BytecodeCompiler(diagnostics=self.diagnostics)
+            fn = compiler.compile(statements)
+            if fn is None or self.diagnostics.had_error:
+                return None
+            self.vm._print_disassembly(fn)
+            return fn
+
+        if self.use_vm:
+            if is_repl and len(statements) == 1 and isinstance(statements[0], ExpressionStmt):
+                compiler = BytecodeCompiler(diagnostics=self.diagnostics)
+                fn = compiler.compile_expression(statements[0].expression)
+                if fn is None or self.diagnostics.had_error:
+                    return None
+                val = self.vm.run(fn)
+                if not self.diagnostics.had_runtime_error:
+                    print(self.vm.stringify(val))
+                return val
+            return self.vm.interpret(statements)
+
         resolver = Resolver(self.interpreter, diagnostics=self.diagnostics)
         resolver.resolve(statements)
 
@@ -184,27 +219,47 @@ def main() -> None:
     args = sys.argv[1:]
     scanner_mode = False
     ast_mode = False
+    bytecode_mode = False
+    use_vm = True
 
-    if "scanner" in args:
+    if "scanner" in args or "--scanner" in args:
         scanner_mode = True
-        args.remove("scanner")
-    elif "--scanner" in args:
-        scanner_mode = True
-        args.remove("--scanner")
-
-    if "ast" in args:
-        ast_mode = True
-        args.remove("ast")
-    elif "--ast" in args or "parser" in args or "--parser" in args:
-        ast_mode = True
-        for opt in ["--ast", "parser", "--parser"]:
+        for opt in ["scanner", "--scanner"]:
             if opt in args:
                 args.remove(opt)
 
-    cli = LoxCLI(scanner_mode=scanner_mode, ast_mode=ast_mode)
+    if any(opt in args for opt in ["ast", "--ast", "parser", "--parser"]):
+        ast_mode = True
+        for opt in ["ast", "--ast", "parser", "--parser"]:
+            if opt in args:
+                args.remove(opt)
+
+    if any(opt in args for opt in ["bytecode", "--bytecode", "--disassemble"]):
+        bytecode_mode = True
+        for opt in ["bytecode", "--bytecode", "--disassemble"]:
+            if opt in args:
+                args.remove(opt)
+
+    if any(opt in args for opt in ["tree-walk", "--tree-walk"]):
+        use_vm = False
+        for opt in ["tree-walk", "--tree-walk"]:
+            if opt in args:
+                args.remove(opt)
+    elif any(opt in args for opt in ["vm", "--vm"]):
+        use_vm = True
+        for opt in ["vm", "--vm"]:
+            if opt in args:
+                args.remove(opt)
+
+    cli = LoxCLI(
+        scanner_mode=scanner_mode,
+        ast_mode=ast_mode,
+        bytecode_mode=bytecode_mode,
+        use_vm=use_vm,
+    )
 
     if len(args) > 1:
-        print("Uso: pylox [scanner|ast] [script.lox]", file=sys.stderr)
+        print("Uso: pylox [scanner|ast|bytecode|vm|tree-walk] [script.lox]", file=sys.stderr)
         sys.exit(64)
     elif len(args) == 1:
         cli.run_file(args[0])
