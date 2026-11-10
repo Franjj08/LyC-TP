@@ -12,6 +12,10 @@ from lox.syntax.ast import (
     AssignmentExpr,
     LogicalExpr,
     CallExpr,
+    GetExpr,
+    SetExpr,
+    ThisExpr,
+    SuperExpr,
     Stmt,
     StmtVisitor,
     ExpressionStmt,
@@ -22,6 +26,7 @@ from lox.syntax.ast import (
     WhileStmt,
     FunDecl,
     ReturnStmt,
+    ClassDecl,
     AstPrinter,
 )
 from lox.syntax.parser import Parser
@@ -41,6 +46,10 @@ __all__ = [
     "AssignmentExpr",
     "LogicalExpr",
     "CallExpr",
+    "GetExpr",
+    "SetExpr",
+    "ThisExpr",
+    "SuperExpr",
     "Stmt",
     "StmtVisitor",
     "ExpressionStmt",
@@ -51,6 +60,7 @@ __all__ = [
     "WhileStmt",
     "FunDecl",
     "ReturnStmt",
+    "ClassDecl",
     "AstPrinter",
     "Parser",
 ]

@@ -47,6 +47,18 @@ class ExprVisitor(ABC):
     def visit_call_expr(self, expr: "CallExpr") -> Any:
         pass
 
+    def visit_get_expr(self, expr: "GetExpr") -> Any:
+        pass
+
+    def visit_set_expr(self, expr: "SetExpr") -> Any:
+        pass
+
+    def visit_this_expr(self, expr: "ThisExpr") -> Any:
+        pass
+
+    def visit_super_expr(self, expr: "SuperExpr") -> Any:
+        pass
+
 
 @dataclass(frozen=True)
 class BinaryExpr(Expr):
@@ -159,6 +171,58 @@ class CallExpr(Expr):
         return f"{self.callee}({args_str})"
 
 
+@dataclass(frozen=True)
+class GetExpr(Expr):
+
+    object: Expr
+    name: Token
+
+    def accept(self, visitor: ExprVisitor) -> Any:
+        return visitor.visit_get_expr(self)
+
+    def __repr__(self) -> str:
+        return f"(. {self.object} {self.name.lexeme})"
+
+
+@dataclass(frozen=True)
+class SetExpr(Expr):
+
+    object: Expr
+    name: Token
+    value: Expr
+
+    def accept(self, visitor: ExprVisitor) -> Any:
+        return visitor.visit_set_expr(self)
+
+    def __repr__(self) -> str:
+        return f"(= (. {self.object} {self.name.lexeme}) {self.value})"
+
+
+@dataclass(frozen=True)
+class ThisExpr(Expr):
+
+    keyword: Token
+
+    def accept(self, visitor: ExprVisitor) -> Any:
+        return visitor.visit_this_expr(self)
+
+    def __repr__(self) -> str:
+        return "this"
+
+
+@dataclass(frozen=True)
+class SuperExpr(Expr):
+
+    keyword: Token
+    method: Token
+
+    def accept(self, visitor: ExprVisitor) -> Any:
+        return visitor.visit_super_expr(self)
+
+    def __repr__(self) -> str:
+        return f"(super {self.method.lexeme})"
+
+
 class Stmt(ABC):
 
     @abstractmethod
@@ -198,6 +262,9 @@ class StmtVisitor(ABC):
 
     @abstractmethod
     def visit_return_stmt(self, stmt: "ReturnStmt") -> Any:
+        pass
+
+    def visit_class_decl(self, stmt: "ClassDecl") -> Any:
         pass
 
 
@@ -280,6 +347,17 @@ class ReturnStmt(Stmt):
         return visitor.visit_return_stmt(self)
 
 
+@dataclass(frozen=True)
+class ClassDecl(Stmt):
+
+    name: Token
+    superclass: Optional[VariableExpr]
+    methods: list[FunDecl]
+
+    def accept(self, visitor: StmtVisitor) -> Any:
+        return visitor.visit_class_decl(self)
+
+
 class AstPrinter(ExprVisitor):
 
     def print(self, expr: Expr) -> str:
@@ -314,6 +392,18 @@ class AstPrinter(ExprVisitor):
 
     def visit_call_expr(self, expr: CallExpr) -> str:
         return self._parenthesize(expr.callee.accept(self), *expr.arguments)
+
+    def visit_get_expr(self, expr: GetExpr) -> str:
+        return f"(. {expr.object.accept(self)} {expr.name.lexeme})"
+
+    def visit_set_expr(self, expr: SetExpr) -> str:
+        return f"(= {expr.object.accept(self)}.{expr.name.lexeme} {expr.value.accept(self)})"
+
+    def visit_this_expr(self, expr: ThisExpr) -> str:
+        return "this"
+
+    def visit_super_expr(self, expr: SuperExpr) -> str:
+        return f"(super {expr.method.lexeme})"
 
     def _parenthesize(self, name: str, *exprs: Expr) -> str:
         parts = [name]
