@@ -12,6 +12,7 @@ from lox.syntax.ast import (
     WhileStmt,
     FunDecl,
     ReturnStmt,
+    ClassDecl,
 )
 from lox.runtime import Interpreter
 from lox.semantics import Resolver
@@ -156,6 +157,9 @@ class LoxCLI:
                 elif isinstance(stmt, ReturnStmt):
                     val_str = f" {AstPrinter().print(stmt.value)}" if stmt.value else ""
                     print(f"(return{val_str})")
+                elif isinstance(stmt, ClassDecl):
+                    super_str = f" < {stmt.superclass.name.lexeme}" if stmt.superclass else ""
+                    print(f"(class {stmt.name.lexeme}{super_str} ...)")
             return statements
 
         resolver = Resolver(self.interpreter, diagnostics=self.diagnostics)

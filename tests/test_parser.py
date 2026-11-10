@@ -6,6 +6,11 @@ from lox.syntax.ast import (
     UnaryExpr,
     GroupingExpr,
     LiteralExpr,
+    GetExpr,
+    SetExpr,
+    ThisExpr,
+    SuperExpr,
+    ClassDecl,
     AstPrinter,
 )
 from lox.errors import DiagnosticReporter
@@ -143,3 +148,48 @@ def test_cli_ast_mode(capsys):
     cli.run("2 + 3 * 4")
     stdout, _ = capsys.readouterr()
     assert "(+ 2.0 (* 3.0 4.0))" in stdout
+
+
+def test_oop_expressions_parsing():
+    printer = AstPrinter()
+
+    expr_get = parse_expression("auto.motor.potencia")
+    assert isinstance(expr_get, GetExpr)
+    assert expr_get.name.lexeme == "potencia"
+    assert printer.print(expr_get) == "(. (. auto motor) potencia)"
+
+    expr_set = parse_expression("this.x = super.calcular(1)")
+    assert isinstance(expr_set, SetExpr)
+    assert isinstance(expr_set.object, ThisExpr)
+    assert expr_set.name.lexeme == "x"
+    assert printer.print(expr_set) == "(= this.x ((super calcular) 1.0))"
+
+    expr_super = parse_expression("super.init")
+    assert isinstance(expr_super, SuperExpr)
+    assert expr_super.method.lexeme == "init"
+
+
+def test_class_declaration_parsing():
+    source = """
+    class Perro < Animal {
+        init(nombre) {
+            this.nombre = nombre;
+        }
+        ladrar() {
+            print "Guau";
+        }
+    }
+    """
+    scanner = Scanner(source)
+    parser = Parser(scanner.scan_tokens())
+    stmts = parser.parse()
+
+    assert len(stmts) == 1
+    cls = stmts[0]
+    assert isinstance(cls, ClassDecl)
+    assert cls.name.lexeme == "Perro"
+    assert cls.superclass is not None
+    assert cls.superclass.name.lexeme == "Animal"
+    assert len(cls.methods) == 2
+    assert cls.methods[0].name.lexeme == "init"
+    assert cls.methods[1].name.lexeme == "ladrar"

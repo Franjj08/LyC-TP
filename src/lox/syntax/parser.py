@@ -10,6 +10,10 @@ from lox.syntax.ast import (
     AssignmentExpr,
     LogicalExpr,
     CallExpr,
+    GetExpr,
+    SetExpr,
+    ThisExpr,
+    SuperExpr,
     Stmt,
     ExpressionStmt,
     PrintStmt,
@@ -19,6 +23,7 @@ from lox.syntax.ast import (
     WhileStmt,
     FunDecl,
     ReturnStmt,
+    ClassDecl,
 )
 from lox.errors import DiagnosticReporter, LoxSyntaxError
 
@@ -54,6 +59,8 @@ class Parser:
 
     def _declaration(self) -> Optional[Stmt]:
         try:
+            if self._match(TokenType.CLASS):
+                return self._class_declaration()
             if self._match(TokenType.FUN):
                 return self._function("función")
             if self._match(TokenType.VAR):
@@ -63,7 +70,24 @@ class Parser:
             self._synchronize()
             return None
 
-    def _function(self, kind: str) -> Stmt:
+    def _class_declaration(self) -> Stmt:
+        name = self._consume(TokenType.IDENTIFIER, "Se esperaba el nombre de la clase.")
+
+        superclass: Optional[VariableExpr] = None
+        if self._match(TokenType.LESS):
+            self._consume(TokenType.IDENTIFIER, "Se esperaba el nombre de la superclase.")
+            superclass = VariableExpr(name=self._previous())
+
+        self._consume(TokenType.LEFT_BRACE, "Se esperaba '{' antes del cuerpo de la clase.")
+
+        methods: list[FunDecl] = []
+        while not self._check(TokenType.RIGHT_BRACE) and not self._is_at_end():
+            methods.append(self._function("método"))
+
+        self._consume(TokenType.RIGHT_BRACE, "Se esperaba '}' después del cuerpo de la clase.")
+        return ClassDecl(name=name, superclass=superclass, methods=methods)
+
+    def _function(self, kind: str) -> FunDecl:
         name = self._consume(TokenType.IDENTIFIER, f"Se esperaba el nombre de la {kind}.")
         self._consume(TokenType.LEFT_PAREN, f"Se esperaba '(' después del nombre de la {kind}.")
         parameters: list[Token] = []
@@ -206,6 +230,8 @@ class Parser:
             if isinstance(expr, VariableExpr):
                 name = expr.name
                 return AssignmentExpr(name=name, value=value)
+            if isinstance(expr, GetExpr):
+                return SetExpr(object=expr.object, name=expr.name, value=value)
 
             self._error(equals, "Objetivo de asignación inválido.")
 
@@ -290,6 +316,9 @@ class Parser:
         while True:
             if self._match(TokenType.LEFT_PAREN):
                 expr = self._finish_call(expr)
+            elif self._match(TokenType.DOT):
+                name = self._consume(TokenType.IDENTIFIER, "Se esperaba el nombre de la propiedad después de '.'.")
+                expr = GetExpr(object=expr, name=name)
             else:
                 break
 
@@ -319,6 +348,15 @@ class Parser:
 
         if self._match(TokenType.NUMBER, TokenType.STRING):
             return LiteralExpr(self._previous().literal)
+
+        if self._match(TokenType.SUPER):
+            keyword = self._previous()
+            self._consume(TokenType.DOT, "Se esperaba '.' después de 'super'.")
+            method = self._consume(TokenType.IDENTIFIER, "Se esperaba el nombre del método de la superclase.")
+            return SuperExpr(keyword=keyword, method=method)
+
+        if self._match(TokenType.THIS):
+            return ThisExpr(keyword=self._previous())
 
         if self._match(TokenType.IDENTIFIER):
             return VariableExpr(name=self._previous())
