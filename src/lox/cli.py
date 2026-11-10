@@ -192,7 +192,7 @@ class LoxCLI:
                 if fn is None or self.diagnostics.had_error:
                     return None
                 val = self.vm.run(fn)
-                if not self.diagnostics.had_runtime_error:
+                if not self.diagnostics.had_runtime_error and val is not None:
                     print(self.vm.stringify(val))
                 return val
             return self.vm.interpret(statements)
@@ -206,7 +206,8 @@ class LoxCLI:
         if is_repl and len(statements) == 1 and isinstance(statements[0], ExpressionStmt):
             try:
                 val = self.interpreter.evaluate(statements[0].expression)
-                print(self.interpreter.stringify(val))
+                if val is not None:
+                    print(self.interpreter.stringify(val))
                 return val
             except LoxRuntimeError as error:
                 self.diagnostics.report_runtime_error(error)
