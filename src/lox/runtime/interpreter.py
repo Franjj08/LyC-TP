@@ -210,6 +210,9 @@ class Interpreter(ExprVisitor, StmtVisitor):
             case TokenType.STAR:
                 self._check_number_operands(expr.operator, left, right)
                 return float(left) * float(right)
+            case TokenType.STAR_STAR:
+                self._check_number_operands(expr.operator, left, right)
+                return float(left) ** float(right)
             case TokenType.PERCENT:
                 self._check_number_operands(expr.operator, left, right)
                 if float(right) == 0.0:

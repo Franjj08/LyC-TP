@@ -223,9 +223,31 @@ class Parser:
     def _assignment(self) -> Expr:
         expr = self._or()
 
-        if self._match(TokenType.EQUAL):
+        if self._match(
+            TokenType.EQUAL,
+            TokenType.PLUS_EQUAL,
+            TokenType.MINUS_EQUAL,
+            TokenType.STAR_EQUAL,
+            TokenType.SLASH_EQUAL,
+        ):
             equals = self._previous()
             value = self._assignment()
+
+            compound_map = {
+                TokenType.PLUS_EQUAL: (TokenType.PLUS, "+"),
+                TokenType.MINUS_EQUAL: (TokenType.MINUS, "-"),
+                TokenType.STAR_EQUAL: (TokenType.STAR, "*"),
+                TokenType.SLASH_EQUAL: (TokenType.SLASH, "/"),
+            }
+            if equals.token_type in compound_map:
+                bin_type, bin_lexeme = compound_map[equals.token_type]
+                op_token = Token(
+                    token_type=bin_type,
+                    lexeme=bin_lexeme,
+                    literal=None,
+                    line=equals.line,
+                )
+                value = BinaryExpr(left=expr, operator=op_token, right=value)
 
             if isinstance(expr, VariableExpr):
                 name = expr.name
@@ -308,7 +330,17 @@ class Parser:
             right = self._unary()
             return UnaryExpr(operator=operator, right=right)
 
-        return self._call()
+        return self._power()
+
+    def _power(self) -> Expr:
+        expr = self._call()
+
+        if self._match(TokenType.STAR_STAR):
+            operator = self._previous()
+            right = self._unary()
+            return BinaryExpr(left=expr, operator=operator, right=right)
+
+        return expr
 
     def _call(self) -> Expr:
         expr = self._primary()

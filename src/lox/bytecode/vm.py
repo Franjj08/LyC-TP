@@ -1,5 +1,5 @@
 import time
-from typing import Any, Optional
+from typing import Any, NoReturn, Optional
 
 from lox.bytecode.chunk import OpCode
 from lox.bytecode.compiler import BytecodeCompiler
@@ -52,6 +52,7 @@ class VirtualMachine:
     ) -> Any:
         compiler = BytecodeCompiler(diagnostics=self.diagnostics)
 
+        statements: list[Stmt]
         if isinstance(target, list):
             statements = target
         elif isinstance(target, Stmt):
@@ -251,6 +252,12 @@ class VirtualMachine:
                     if float(b) == 0.0:
                         self._error("Módulo por cero.", frame, op_offset)
                     self.push(float(a) % float(b))
+
+                case OpCode.OP_POWER:
+                    b = self.pop()
+                    a = self.pop()
+                    self._check_numbers(a, b, frame, op_offset)
+                    self.push(float(a) ** float(b))
 
                 case OpCode.OP_NOT:
                     self.push(not self._is_truthy(self.pop()))
@@ -503,7 +510,7 @@ class VirtualMachine:
 
     def _error(
         self, message: str, frame: CallFrame, op_offset: int
-    ) -> None:
+    ) -> NoReturn:
         lines = frame.closure.function.chunk.lines
         line = lines[op_offset] if 0 <= op_offset < len(lines) else None
         raise LoxRuntimeError(message, line=line)

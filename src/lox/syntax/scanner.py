@@ -46,13 +46,20 @@ class Scanner:
             case ".":
                 self._add_token(TokenType.DOT)
             case "-":
-                self._add_token(TokenType.MINUS)
+                token_type = TokenType.MINUS_EQUAL if self._match("=") else TokenType.MINUS
+                self._add_token(token_type)
             case "+":
-                self._add_token(TokenType.PLUS)
+                token_type = TokenType.PLUS_EQUAL if self._match("=") else TokenType.PLUS
+                self._add_token(token_type)
             case ";":
                 self._add_token(TokenType.SEMICOLON)
             case "*":
-                self._add_token(TokenType.STAR)
+                if self._match("*"):
+                    self._add_token(TokenType.STAR_STAR)
+                elif self._match("="):
+                    self._add_token(TokenType.STAR_EQUAL)
+                else:
+                    self._add_token(TokenType.STAR)
             case "%":
                 self._add_token(TokenType.PERCENT)
 
@@ -73,6 +80,8 @@ class Scanner:
                 if self._match("/"):
                     while self._peek() != "\n" and not self._is_at_end():
                         self._advance()
+                elif self._match("="):
+                    self._add_token(TokenType.SLASH_EQUAL)
                 else:
                     self._add_token(TokenType.SLASH)
 

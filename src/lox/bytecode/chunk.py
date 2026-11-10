@@ -13,6 +13,7 @@ class OpCode(IntEnum):
     OP_MULTIPLY = auto()
     OP_DIVIDE = auto()
     OP_MODULO = auto()
+    OP_POWER = auto()
     OP_NEGATE = auto()
     OP_NOT = auto()
     OP_EQUAL = auto()
@@ -62,7 +63,7 @@ class Chunk:
         self.lines: list[int] = []
 
     def write(self, byte: int, line: int = 1) -> None:
-        self.code.append(int(byte) & 0xFF)
+        self.code.append(byte & 0xFF)
         self.lines.append(line)
 
     def add_constant(self, value: Any) -> int:

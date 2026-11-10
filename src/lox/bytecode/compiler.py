@@ -147,7 +147,7 @@ class BytecodeCompiler(ExprVisitor, StmtVisitor):
 
     def _emit_byte(self, byte: int, line: Optional[int] = None) -> None:
         target_line = self.current_line if line is None else line
-        self.chunk.write(int(byte), target_line)
+        self.chunk.write(byte, target_line)
 
     def _emit_bytes(
         self, byte1: int, byte2: int, line: Optional[int] = None
@@ -540,6 +540,8 @@ class BytecodeCompiler(ExprVisitor, StmtVisitor):
                 self._emit_byte(OpCode.OP_DIVIDE, line)
             case TokenType.PERCENT:
                 self._emit_byte(OpCode.OP_MODULO, line)
+            case TokenType.STAR_STAR:
+                self._emit_byte(OpCode.OP_POWER, line)
             case TokenType.EQUAL_EQUAL:
                 self._emit_byte(OpCode.OP_EQUAL, line)
             case TokenType.BANG_EQUAL:

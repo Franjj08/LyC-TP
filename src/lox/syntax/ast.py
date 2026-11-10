@@ -1,15 +1,13 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Optional, TypeVar
+from typing import Any, Optional
 from lox.syntax.token import Token
-
-T = TypeVar("T")
 
 
 class Expr(ABC):
 
     @abstractmethod
-    def accept(self, visitor: "ExprVisitor[T]") -> T:
+    def accept(self, visitor: "ExprVisitor") -> Any:
         pass
 
 
@@ -230,7 +228,7 @@ class SuperExpr(Expr):
 class Stmt(ABC):
 
     @abstractmethod
-    def accept(self, visitor: "StmtVisitor[T]") -> T:
+    def accept(self, visitor: "StmtVisitor") -> Any:
         pass
 
 
