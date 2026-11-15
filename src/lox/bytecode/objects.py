@@ -6,6 +6,8 @@ from lox.bytecode.chunk import Chunk
 class ObjFunction:
     """Representación en tiempo de compilación y ejecución de una función Lox."""
 
+    __slots__ = ("name", "arity", "upvalue_count", "chunk")
+
     def __init__(self, name: Optional[str] = None, arity: int = 0) -> None:
         self.name: Optional[str] = name
         self.arity: int = arity
@@ -24,6 +26,8 @@ class ObjFunction:
 class ObjUpvalue:
     """Referencia a una variable local capturada por un closure (abierta en stack o cerrada en heap)."""
 
+    __slots__ = ("location", "closed")
+
     def __init__(self, location: Optional[int]) -> None:
         self.location: Optional[int] = location
         self.closed: Any = None
@@ -37,9 +41,14 @@ class ObjUpvalue:
 class ObjClosure:
     """Función empaquetada junto con sus upvalues capturados en tiempo de ejecución."""
 
+    __slots__ = ("function", "upvalues", "arity", "code", "constants")
+
     def __init__(self, function: ObjFunction) -> None:
         self.function: ObjFunction = function
         self.upvalues: list[ObjUpvalue] = []
+        self.arity: int = function.arity
+        self.code: bytearray = function.chunk.code
+        self.constants: list[Any] = function.chunk.constants
 
     def __repr__(self) -> str:
         return repr(self.function)
@@ -50,6 +59,8 @@ class ObjClosure:
 
 class ObjNative:
     """Función nativa de la máquina virtual (ej. clock)."""
+
+    __slots__ = ("name", "arity", "fn")
 
     def __init__(self, name: str, arity: int, fn: Callable[[list[Any]], Any]) -> None:
         self.name: str = name
@@ -66,6 +77,8 @@ class ObjNative:
 class ObjClass:
     """Representación de una clase Lox en la VM."""
 
+    __slots__ = ("name", "methods")
+
     def __init__(self, name: str) -> None:
         self.name: str = name
         self.methods: dict[str, ObjClosure] = {}
@@ -79,6 +92,8 @@ class ObjClass:
 
 class ObjInstance:
     """Instancia de una clase Lox en la VM."""
+
+    __slots__ = ("klass", "fields")
 
     def __init__(self, klass: ObjClass) -> None:
         self.klass: ObjClass = klass
@@ -94,6 +109,8 @@ class ObjInstance:
 class ObjBoundMethod:
     """Método enlazado a una instancia particular (`this`)."""
 
+    __slots__ = ("receiver", "method")
+
     def __init__(self, receiver: ObjInstance, method: ObjClosure) -> None:
         self.receiver: ObjInstance = receiver
         self.method: ObjClosure = method
@@ -105,11 +122,13 @@ class ObjBoundMethod:
         return str(self.method.function)
 
 
-@dataclass
+@dataclass(slots=True)
 class CallFrame:
     """Marco de activación de una invocación de función en la pila de la VM."""
 
     closure: ObjClosure
+    code: bytearray
+    constants: list[Any]
     ip: int = 0
     base_slot: int = 0
 

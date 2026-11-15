@@ -338,7 +338,7 @@ while self.ip < len(chunk.bytes):
   1. Cacheé en variables locales de la función `_execute` las referencias más accedidas del frame activo (`code`, `constants`, `ip`, `base_slot`, `stack`, `push = stack.append`, `pop = stack.pop`), evitando decenas de millones de búsquedas de atributos (`self.stack`, `self.ip`) en Python.
   2. Usé *fast-paths* para operaciones aritméticas y de comparación (`ta is float or ta is int`), evitando llamadas a métodos de validación en el caso común.
   3. Separé completamente el desensamblador (`Chunk.disassemble()`) del bucle de ejecución de la VM, eliminando el formateo de strings en tiempo de corrida.
-  4. Como resultado, en el benchmark `large_loop.lox` la VM del TP es **4,61x más rápida que `ploxb`** (`0,91 s` vs. `4,20 s`).
+  4. Como resultado, en el [benchmark](#benchmarks-y-análisis-de-performance) `large_loop.lox` la VM del TP es **4,61x más rápida que `ploxb`** (`0,91 s` vs. `4,20 s`).
 
 ### 3. Alcance del lenguaje en Bytecode: CallFrames, Upvalues cerrados y OOP con `OP_INVOKE`
 
@@ -358,18 +358,11 @@ Respecto al intérprete Tree-Walk (`plox` de la cátedra vs. mi `Interpreter`):
 
 ## ¿El lenguaje de la implementación (Python) me cambió alguna idea?
 
-Implementar tanto un intérprete Tree-Walk como un compilador a Bytecode y su Máquina Virtual usando **Python** (en lugar de un lenguaje compilado a código nativo como C en el `clox` de *Crafting Interpreters* o Rust/C++) me cambió varias ideas que tenía sobre cómo funciona un runtime por dentro:
+Implementar el compilador y la Máquina Virtual en **Python** (en lugar de C como `clox` en *Crafting Interpreters*) me cambió tres ideas principales:
 
-1. **El efecto de la "Doble Interpretación" (*Double Interpretation Overhead*):**
-   Antes de hacer el TP, mi intuición era que pasar de un intérprete Tree-Walk a una Máquina Virtual de Bytecode iba a multiplicar la velocidad por 10x o 20x automáticamente. Al implementarlo en Python vi que mi bucle `while True: match byte:` dentro de `VirtualMachine._execute()` **está siendo interpretado a su vez por la Máquina Virtual en C de CPython** (`_PyEval_EvalFrameDefault`). Es decir, por cada opcode de Lox que decodifico, CPython ejecuta decenas de sus propios bytecodes en C. Esto me mostró que en un lenguaje anfitrión interpretado el cuello de botella principal no es solo recorrer el árbol vs. leer un `bytearray`, sino **la cantidad de operaciones y llamadas a funciones del lenguaje anfitrión que se ejecutan por cada instrucción de Lox**.
-2. **Importancia de los detalles de bajo nivel de Python en el loop de la VM:**
-   Me sorprendió cuánto impactan micro-decisiones de Python dentro del ciclo *fetch-decode-execute*. En mi primera versión de la VM, hacer `self.stack.append(...)`, `self.stack.pop()` y `self.frames[-1].ip` en cada opcode hacía que el bucle aritmético tardara `2,23 s`. Simplemente cachear las referencias calientes en variables locales de la función (`stack = self.stack`, `push = stack.append`, `pop = stack.pop`, `code`, `ip`, `base_slot`) —lo que en CPython reemplaza búsquedas en diccionarios de atributos (`LOAD_ATTR`) por accesos a arreglos locales (`LOAD_FAST`)— redujo el tiempo a **`0,91 s` (más de 2,4x de mejora)** y me permitió superar ampliamente al Tree-Walk.
-3. **Representación de valores y localidad de memoria:**
-   En C (`clox`), un `Chunk` de bytes y un `Value[]` en el stack aprovechan al máximo la caché L1/L2 del procesador porque los valores son structs compactos (`NaN-boxing` o *tagged unions* de 8/16 bytes) contiguos en memoria. En Python, si bien `Chunk.code` sí es un `bytearray` contiguo real en memoria, el `stack: list[Any]` almacena punteros `PyObject*` a objetos boxeados en el heap de Python (`float`, `bool`, `str`). Entender esto me permitió ver por qué Python 3.12 nativo tarda `0,024 s` en el mismo bucle: su bucle corre directamente en C mientras que mi VM paga el costo de despachar en Python.
-4. **El Garbage Collector del lenguaje anfitrión como ventaja y como límite:**
-   Por un lado, apoyarme en el conteo de referencias y el recolector de basura cíclico de Python me simplificó mucho la gestión de memoria (no tuve que programar un *Mark-and-Sweep GC* manual como en C). Sin embargo, al medir el benchmark de objetos (`oop_simulation.lox`), noté que crear un objeto `ObjBoundMethod` nuevo en cada llamada `inst.step(i)` generaba cientos de miles de alocaciones efímeras en el heap de Python. Eso me llevó a implementar las superinstrucciones `OP_INVOKE` y `OP_SUPER_INVOKE`, que fusionan la búsqueda del método y la llamada sin alocar ningún objeto intermedio.
-5. **Expresividad para diseñar el compilador:**
-   Finalmente, usar Python 3.12 con `@dataclass(frozen=True)`, `IntEnum` y *pattern matching* estructural (`match / case`) hizo que escribir el compilador, el desensamblador y el manejador de opcodes fuera mucho más claro, declarativo y menos propenso a bugs de memoria que en C, permitiéndome concentrarme en los invariantes de pila, el *backpatching* de saltos y la semántica de los *upvalues*.
+1. **El costo de la "doble interpretación":** Pensaba que pasar de Tree-Walk a Bytecode VM iba a dar una mejora de 10x automáticamente, pero en Python el bucle `while True: match byte:` de mi VM es interpretado a su vez por la VM de CPython. Por eso el cuello de botella pasa por cuántas operaciones de Python se ejecutan por cada instrucción de Lox.
+2. **El impacto de buscar atributos en el loop principal:** En mi primera versión de la VM, hacer `self.stack.append` y `self.stack.pop` en cada instrucción hacía que `large_loop.lox` tardara `2,23 s`. Guardar `stack`, `push`, `pop`, `code` e `ip` en variables locales dentro de `_execute()` bajó el tiempo a **`0,91 s`**, superando al Tree-Walk.
+3. **El Garbage Collector de Python ayuda, pero crear objetos temporales cuesta:** Python me ahorró programar un *Garbage Collector* manual para limpiar instancias y closures, pero alocar objetos efímeros en un bucle (como crear un `ObjBoundMethod` en cada llamada a método) es costoso, lo que me motivó a agregar `OP_INVOKE` y `OP_SUPER_INVOKE`.
 
 ---
 
@@ -387,34 +380,7 @@ En todas las pruebas se realiza 1 corrida previa de calentamiento (*warmup*) des
 
 ![Resultados de Benchmarks Lox](benches/benchmark_results.svg)
 
-### Tablas de Resultados
 
-#### 1. `large_loop.lox` (500.000 iteraciones aritméticas)
-
-| Implementación | Mediana (s) | Promedio (s) | Mínimo (s) | Tiempo relativo vs. TP VM |
-|---|---:|---:|---:|---:|
-| **TP (Bytecode VM)** | **0,9105** | 0,9078 | 0,9022 | **1,00x (base)** |
-| **TP (Tree-Walk)** | 1,2102 | 1,2114 | 1,2068 | 1,33x *(la VM del TP es **1,33x más rápida**)* |
-| **Cátedra (`ploxb`)** | 4,1979 | 4,2198 | 4,1070 | 4,61x *(la VM del TP es **4,61x más rápida**)* |
-| **Cátedra (`plox`)** | 5,9964 | 5,9992 | 5,9680 | 6,59x *(la VM del TP es **6,59x más rápida**)* |
-| **Python 3.12 (nativo)** | 0,0240 | 0,0241 | 0,0232 | 0,03x *(~38x más rápido que la VM en Python)* |
-
-#### 2. `fib_recursive.lox` (Fibonacci recursivo `n=26`)
-
-| Implementación | Mediana (s) | Promedio (s) | Mínimo (s) | Tiempo relativo vs. TP VM |
-|---|---:|---:|---:|---:|
-| **TP (Bytecode VM)** | **0,8052** | 0,8073 | 0,8026 | **1,00x (base)** |
-| **TP (Tree-Walk)** | 0,8726 | 0,8726 | 0,8703 | 1,08x *(la VM del TP es **1,08x más rápida**)* |
-| **Cátedra (`plox`)** | 3,1881 | 3,1824 | 3,1692 | 3,96x *(la VM del TP es **3,96x más rápida**)* |
-| **Python 3.12 (nativo)** | 0,0161 | 0,0161 | 0,0159 | 0,02x |
-
-#### 3. `oop_simulation.lox` (100.000 llamadas con herencia y `super`)
-
-| Implementación | Mediana (s) | Promedio (s) | Mínimo (s) | Tiempo relativo vs. TP VM |
-|---|---:|---:|---:|---:|
-| **TP (Bytecode VM)** | **0,6773** | 0,6758 | 0,6724 | **1,00x (base)** |
-| **TP (Tree-Walk)** | 0,6748 | 0,6739 | 0,6676 | 1,00x *(paridad gracias a `OP_INVOKE` y `OP_SUPER_INVOKE`)* |
-| **Python 3.12 (nativo)** | 0,0165 | 0,0165 | 0,0163 | 0,02x |
 
 ### Conclusiones de los Benchmarks
 

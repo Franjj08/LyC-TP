@@ -84,7 +84,15 @@ class VirtualMachine:
 
         script_closure = ObjClosure(function)
         self.push(script_closure)
-        self.frames.append(CallFrame(closure=script_closure, ip=0, base_slot=0))
+        self.frames.append(
+            CallFrame(
+                closure=script_closure,
+                code=script_closure.code,
+                constants=script_closure.constants,
+                ip=0,
+                base_slot=0,
+            )
+        )
 
         try:
             return self._execute()
@@ -102,13 +110,14 @@ class VirtualMachine:
         push = stack.append
         pop = stack.pop
         frames = self.frames
+        push_frame = frames.append
+        pop_frame = frames.pop
         globals_dict = self.globals
         open_upvalues = self.open_upvalues
-        _missing = object()
 
         frame = frames[-1]
-        code = frame.closure.function.chunk.code
-        constants = frame.closure.function.chunk.constants
+        code = frame.code
+        constants = frame.constants
         ip = frame.ip
         base_slot = frame.base_slot
 
@@ -346,12 +355,20 @@ class VirtualMachine:
                     ip += 1
                     frame.ip = ip
                     callee = stack[-1 - arg_count]
-                    self._call_value(callee, arg_count, frame, op_offset)
-                    frame = frames[-1]
-                    code = frame.closure.function.chunk.code
-                    constants = frame.closure.function.chunk.constants
-                    ip = frame.ip
-                    base_slot = frame.base_slot
+                    if type(callee) is ObjClosure and arg_count == callee.arity and len(frames) < 256:
+                        base_slot = len(stack) - arg_count - 1
+                        code = callee.code
+                        constants = callee.constants
+                        ip = 0
+                        frame = CallFrame(callee, code, constants, 0, base_slot)
+                        push_frame(frame)
+                    else:
+                        self._call_value(callee, arg_count, frame, op_offset)
+                        frame = frames[-1]
+                        code = frame.code
+                        constants = frame.constants
+                        ip = frame.ip
+                        base_slot = frame.base_slot
 
                 case OpCode.OP_CLOSURE:
                     const_idx = code[ip]
@@ -402,41 +419,43 @@ class VirtualMachine:
                     name = constants[code[ip]]
                     ip += 1
                     instance = stack[-1]
-                    if not isinstance(instance, ObjInstance):
+                    if type(instance) is ObjInstance:
+                        fields = instance.fields
+                        if name in fields:
+                            stack[-1] = fields[name]
+                        elif (method := instance.klass.methods.get(name)) is not None:
+                            stack[-1] = ObjBoundMethod(
+                                receiver=instance,
+                                method=method,
+                            )
+                        else:
+                            frame.ip = ip
+                            self._error(
+                                f"Propiedad no definida '{name}'.", frame, op_offset
+                            )
+                    else:
                         frame.ip = ip
                         self._error(
                             "Solo las instancias tienen propiedades.",
                             frame,
                             op_offset,
                         )
-                    val = instance.fields.get(name, _missing)
-                    if val is not _missing:
-                        stack[-1] = val
-                    elif (method := instance.klass.methods.get(name)) is not None:
-                        stack[-1] = ObjBoundMethod(
-                            receiver=instance,
-                            method=method,
-                        )
-                    else:
-                        frame.ip = ip
-                        self._error(
-                            f"Propiedad no definida '{name}'.", frame, op_offset
-                        )
 
                 case OpCode.OP_SET_PROPERTY:
                     name = constants[code[ip]]
                     ip += 1
                     instance = stack[-2]
-                    if not isinstance(instance, ObjInstance):
+                    if type(instance) is ObjInstance:
+                        value = pop()
+                        instance.fields[name] = value
+                        stack[-1] = value
+                    else:
                         frame.ip = ip
                         self._error(
                             "Solo las instancias tienen campos.",
                             frame,
                             op_offset,
                         )
-                    value = pop()
-                    instance.fields[name] = value
-                    stack[-1] = value
 
                 case OpCode.OP_GET_SUPER:
                     name = constants[code[ip]]
@@ -460,30 +479,43 @@ class VirtualMachine:
                     ip += 2
                     frame.ip = ip
                     receiver = stack[-1 - arg_count]
-                    if not isinstance(receiver, ObjInstance):
+                    if type(receiver) is not ObjInstance:
                         self._error(
                             "Solo las instancias tienen propiedades.",
                             frame,
                             op_offset,
                         )
-                    val = receiver.fields.get(name, _missing)
-                    if val is not _missing:
+                    if name not in receiver.fields:
+                        method = receiver.klass.methods.get(name)
+                        if method is not None and arg_count == method.arity and len(frames) < 256:
+                            base_slot = len(stack) - arg_count - 1
+                            code = method.code
+                            constants = method.constants
+                            ip = 0
+                            frame = CallFrame(method, code, constants, 0, base_slot)
+                            push_frame(frame)
+                        else:
+                            if method is None:
+                                self._error(
+                                    f"Propiedad no definida '{name}'.",
+                                    frame,
+                                    op_offset,
+                                )
+                            self._call_closure(method, arg_count, frame, op_offset)
+                            frame = frames[-1]
+                            code = frame.code
+                            constants = frame.constants
+                            ip = frame.ip
+                            base_slot = frame.base_slot
+                    else:
+                        val = receiver.fields[name]
                         stack[-1 - arg_count] = val
                         self._call_value(val, arg_count, frame, op_offset)
-                    else:
-                        method = receiver.klass.methods.get(name)
-                        if method is None:
-                            self._error(
-                                f"Propiedad no definida '{name}'.",
-                                frame,
-                                op_offset,
-                            )
-                        self._call_closure(method, arg_count, frame, op_offset)
-                    frame = frames[-1]
-                    code = frame.closure.function.chunk.code
-                    constants = frame.closure.function.chunk.constants
-                    ip = frame.ip
-                    base_slot = frame.base_slot
+                        frame = frames[-1]
+                        code = frame.code
+                        constants = frame.constants
+                        ip = frame.ip
+                        base_slot = frame.base_slot
 
                 case OpCode.OP_SUPER_INVOKE:
                     name = constants[code[ip]]
@@ -493,22 +525,30 @@ class VirtualMachine:
                     superclass = pop()
                     assert isinstance(superclass, ObjClass)
                     method = superclass.methods.get(name)
-                    if method is None:
-                        self._error(
-                            f"Propiedad no definida '{name}'.",
-                            frame,
-                            op_offset,
-                        )
-                    self._call_closure(method, arg_count, frame, op_offset)
-                    frame = frames[-1]
-                    code = frame.closure.function.chunk.code
-                    constants = frame.closure.function.chunk.constants
-                    ip = frame.ip
-                    base_slot = frame.base_slot
+                    if method is not None and arg_count == method.arity and len(frames) < 256:
+                        base_slot = len(stack) - arg_count - 1
+                        code = method.code
+                        constants = method.constants
+                        ip = 0
+                        frame = CallFrame(method, code, constants, 0, base_slot)
+                        push_frame(frame)
+                    else:
+                        if method is None:
+                            self._error(
+                                f"Propiedad no definida '{name}'.",
+                                frame,
+                                op_offset,
+                            )
+                        self._call_closure(method, arg_count, frame, op_offset)
+                        frame = frames[-1]
+                        code = frame.code
+                        constants = frame.constants
+                        ip = frame.ip
+                        base_slot = frame.base_slot
 
                 case OpCode.OP_RETURN:
                     result = pop()
-                    finished_frame = frames.pop()
+                    finished_frame = pop_frame()
                     if open_upvalues:
                         self._close_upvalues(finished_frame.base_slot)
 
@@ -519,8 +559,8 @@ class VirtualMachine:
                     del stack[finished_frame.base_slot :]
                     push(result)
                     frame = frames[-1]
-                    code = frame.closure.function.chunk.code
-                    constants = frame.closure.function.chunk.constants
+                    code = frame.code
+                    constants = frame.constants
                     ip = frame.ip
                     base_slot = frame.base_slot
 
@@ -585,7 +625,7 @@ class VirtualMachine:
         frame: CallFrame,
         op_offset: int,
     ) -> None:
-        arity = closure.function.arity
+        arity = closure.arity
         if arg_count != arity:
             self._error(
                 f"Se esperaban {arity} argumentos pero se obtuvieron {arg_count}.",
@@ -597,7 +637,13 @@ class VirtualMachine:
 
         base_slot = len(self.stack) - arg_count - 1
         self.frames.append(
-            CallFrame(closure=closure, ip=0, base_slot=base_slot)
+            CallFrame(
+                closure=closure,
+                code=closure.code,
+                constants=closure.constants,
+                ip=0,
+                base_slot=base_slot,
+            )
         )
 
     def _capture_upvalue(self, stack_location: int) -> ObjUpvalue:

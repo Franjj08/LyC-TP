@@ -13,43 +13,43 @@
 <rect x="24" y="75" width="812" height="196" rx="8" fill="#ffffff" stroke="#e2e8f0"/>
 <text x="40" y="101" class="bench-title">large_loop.lox (500.000 iteraciones aritméticas)</text>
 <text x="40" y="135" class="label">TP (Bytecode VM)</text>
-<rect x="215" y="121" width="75.9" height="18" rx="4" fill="#2563eb"/>
-<text x="298.9" y="135" class="val">0.9105 s</text>
+<rect x="215" y="121" width="80.0" height="18" rx="4" fill="#2563eb"/>
+<text x="303.0" y="135" class="val">0.9666 s</text>
 <text x="40" y="163" class="label">TP (Tree-Walk)</text>
-<rect x="215" y="149" width="100.9" height="18" rx="4" fill="#0ea5e9"/>
-<text x="323.9" y="163" class="val">1.2102 s</text>
+<rect x="215" y="149" width="102.8" height="18" rx="4" fill="#0ea5e9"/>
+<text x="325.8" y="163" class="val">1.2419 s</text>
 <text x="40" y="191" class="label">Cátedra (ploxb)</text>
-<rect x="215" y="177" width="350.0" height="18" rx="4" fill="#f59e0b"/>
-<text x="573.0" y="191" class="val">4.1979 s</text>
+<rect x="215" y="177" width="346.7" height="18" rx="4" fill="#f59e0b"/>
+<text x="569.7" y="191" class="val">4.1885 s</text>
 <text x="40" y="219" class="label">Cátedra (plox)</text>
 <rect x="215" y="205" width="500.0" height="18" rx="4" fill="#ef4444"/>
-<text x="723.0" y="219" class="val">5.9964 s</text>
+<text x="723.0" y="219" class="val">6.0400 s</text>
 <text x="40" y="247" class="label">Python 3.12 (nativo)</text>
 <rect x="215" y="233" width="4.0" height="18" rx="4" fill="#10b981"/>
-<text x="227.0" y="247" class="val">0.0240 s</text>
+<text x="227.0" y="247" class="val">0.0249 s</text>
 <rect x="24" y="285" width="812" height="196" rx="8" fill="#ffffff" stroke="#e2e8f0"/>
 <text x="40" y="311" class="bench-title">fib_recursive.lox (Fibonacci recursivo n=26)</text>
 <text x="40" y="345" class="label">TP (Bytecode VM)</text>
-<rect x="215" y="331" width="126.3" height="18" rx="4" fill="#2563eb"/>
-<text x="349.3" y="345" class="val">0.8052 s</text>
+<rect x="215" y="331" width="111.7" height="18" rx="4" fill="#2563eb"/>
+<text x="334.7" y="345" class="val">0.7284 s</text>
 <text x="40" y="373" class="label">TP (Tree-Walk)</text>
-<rect x="215" y="359" width="136.8" height="18" rx="4" fill="#0ea5e9"/>
-<text x="359.8" y="373" class="val">0.8726 s</text>
+<rect x="215" y="359" width="134.8" height="18" rx="4" fill="#0ea5e9"/>
+<text x="357.8" y="373" class="val">0.8795 s</text>
 <text x="40" y="401" class="label">Cátedra (plox)</text>
 <rect x="215" y="387" width="500.0" height="18" rx="4" fill="#ef4444"/>
-<text x="723.0" y="401" class="val">3.1881 s</text>
+<text x="723.0" y="401" class="val">3.2619 s</text>
 <text x="40" y="429" class="label">Python 3.12 (nativo)</text>
 <rect x="215" y="415" width="4.0" height="18" rx="4" fill="#10b981"/>
-<text x="227.0" y="429" class="val">0.0161 s</text>
+<text x="227.0" y="429" class="val">0.0171 s</text>
 <rect x="24" y="495" width="812" height="196" rx="8" fill="#ffffff" stroke="#e2e8f0"/>
 <text x="40" y="521" class="bench-title">oop_simulation.lox (100.000 llamadas con herencia y super)</text>
 <text x="40" y="555" class="label">TP (Bytecode VM)</text>
-<rect x="215" y="541" width="500.0" height="18" rx="4" fill="#2563eb"/>
-<text x="723.0" y="555" class="val">0.6773 s</text>
+<rect x="215" y="541" width="470.9" height="18" rx="4" fill="#2563eb"/>
+<text x="693.9" y="555" class="val">0.6400 s</text>
 <text x="40" y="583" class="label">TP (Tree-Walk)</text>
-<rect x="215" y="569" width="498.2" height="18" rx="4" fill="#0ea5e9"/>
-<text x="721.2" y="583" class="val">0.6748 s</text>
+<rect x="215" y="569" width="500.0" height="18" rx="4" fill="#0ea5e9"/>
+<text x="723.0" y="583" class="val">0.6796 s</text>
 <text x="40" y="611" class="label">Python 3.12 (nativo)</text>
-<rect x="215" y="597" width="12.2" height="18" rx="4" fill="#10b981"/>
-<text x="235.2" y="611" class="val">0.0165 s</text>
+<rect x="215" y="597" width="14.1" height="18" rx="4" fill="#10b981"/>
+<text x="237.1" y="611" class="val">0.0191 s</text>
 </svg>
