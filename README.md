@@ -336,9 +336,9 @@ while self.ip < len(chunk.bytes):
 
 - **En el TP (`src/lox/bytecode/vm.py`):** En [`VirtualMachine._execute()`](src/lox/bytecode/vm.py) optimicé el camino crítico de despacho:
   1. Cacheé en variables locales de la función `_execute` las referencias más accedidas del frame activo (`code`, `constants`, `ip`, `base_slot`, `stack`, `push = stack.append`, `pop = stack.pop`), evitando decenas de millones de búsquedas de atributos (`self.stack`, `self.ip`) en Python.
-  2. Usé *fast-paths* para operaciones aritméticas y de comparación (`ta is float or ta is int`), evitando llamadas a métodos de validación en el caso común.
+  2. Usé *fast-paths* para operaciones aritméticas y de comparación, evitando llamadas a métodos de validación en el caso común.
   3. Separé completamente el desensamblador (`Chunk.disassemble()`) del bucle de ejecución de la VM, eliminando el formateo de strings en tiempo de corrida.
-  4. Como resultado, en el [benchmark](#benchmarks-y-análisis-de-performance) `large_loop.lox` la VM del TP es **4,61x más rápida que `ploxb`** (`0,91 s` vs. `4,20 s`).
+  4. Como resultado, en el [benchmark](#benchmarks-y-análisis-de-performance) `large_loop.lox` la VM del TP es **4,33x más rápida que `ploxb`** (`0,97 s` vs. `4,19 s`).
 
 ### 3. Alcance del lenguaje en Bytecode: CallFrames, Upvalues cerrados y OOP con `OP_INVOKE`
 
@@ -372,7 +372,7 @@ La suite [`benches/benchmark.py`](benches/benchmark.py) evalúa de punta a punta
 
 1. **[`large_loop.lox`](benches/programs/large_loop.lox):** Bucle intensivo de 500.000 iteraciones aritméticas (`sum = sum + (i % 7)`). Evalúa el costo puro del ciclo *fetch-decode-execute*, saltos (`OP_LOOP`, `OP_JUMP_IF_FALSE`) y acceso a variables.
 2. **[`fib_recursive.lox`](benches/programs/fib_recursive.lox):** Cálculo recursivo de `fib(26)` (392.835 llamadas recursivas). Evalúa el costo de creación y destrucción de `CallFrame`s (`OP_CALL` y `OP_RETURN`) frente a la creación de `Environment`s en el Tree-Walk.
-3. **[`oop_simulation.lox`](benches/programs/oop_simulation.lox):** 100.000 iteraciones invocando métodos polimórficos con herencia (`Troop < Entity`), lectura/escritura de propiedades (`this.hp`, `this.energy`) y llamadas a la superclase (`super.step(dt)`).
+3. **[`oop_simulation.lox`](benches/programs/oop_simulation.lox):** 100.000 iteraciones invocando métodos polimórficos con herencia (`Unidad < Entidad`), lectura/escritura de propiedades (`this.energia`, `this.factor`) y llamadas a la superclase (`super.actualizar(...)`).
 
 En todas las pruebas se realiza 1 corrida previa de calentamiento (*warmup*) descartada y luego se miden las corridas verificando que la salida numérica coincida exactamente con el valor esperado.
 
@@ -380,16 +380,14 @@ En todas las pruebas se realiza 1 corrida previa de calentamiento (*warmup*) des
 
 ![Resultados de Benchmarks Lox](benches/benchmark_results.svg)
 
-
-
 ### Conclusiones de los Benchmarks
 
 1. **Entrega Final (Bytecode VM) vs. Entrega Parcial (Tree-Walk):**
-   En `large_loop.lox` la Bytecode VM reduce el tiempo de ejecución de `1,21 s` a `0,91 s` (**33% más rápida**), y en `fib_recursive.lox` de `0,87 s` a `0,80 s`. La mejora proviene de eliminar el despacho recursivo de métodos del patrón Visitor sobre el AST y reemplazar las búsquedas en diccionarios de `Environment` por indexación directa sobre el stack (`stack[base_slot + slot]`) y saltos planos sobre `bytearray`.
-2. **Impacto de `OP_INVOKE` y `OP_SUPER_INVOKE` en OOP:**
-   En `oop_simulation.lox`, sin las superinstrucciones de invocación, la VM tardaba `0,75 s` porque cada llamada a `inst.step(i)` y `super.step(dt)` ejecutaba dos instrucciones (`OP_GET_PROPERTY` / `OP_GET_SUPER` + `OP_CALL`) e instanciaba 200.000 objetos `ObjBoundMethod` efímeros. Al incorporar `OP_INVOKE` y `OP_SUPER_INVOKE`, el tiempo bajó a `0,67 s`, alcanzando la paridad con el Tree-Walk.
+   La Bytecode VM supera al Tree-Walk en los tres benchmarks: en `large_loop.lox` reduce el tiempo de `1,24 s` a `0,97 s` (**1,28x más rápida**), en `fib_recursive.lox` de `0,88 s` a `0,73 s` (**1,21x más rápida**), y en `oop_simulation.lox` de `0,68 s` a `0,64 s` (**1,06x más rápida**). La mejora proviene de eliminar el despacho recursivo de métodos del patrón Visitor sobre el AST y reemplazar las búsquedas en diccionarios de `Environment` por indexación directa sobre el stack (`stack[base_slot + slot]`), saltos planos sobre `bytearray` y uso de `__slots__` en `CallFrame` y objetos de la VM.
+2. **Impacto de `OP_INVOKE`, `OP_SUPER_INVOKE` y `__slots__` en OOP:**
+   En `oop_simulation.lox`, sin las superinstrucciones de invocación, la VM tardaba `0,75 s` porque cada llamada a `u.actualizar(1)` y `super.actualizar(...)` ejecutaba dos instrucciones (`OP_GET_PROPERTY` / `OP_GET_SUPER` + `OP_CALL`) e instanciaba 200.000 objetos `ObjBoundMethod` efímeros. Al incorporar `OP_INVOKE`, `OP_SUPER_INVOKE` y `slots=True` en `CallFrame` / `ObjClosure`, el tiempo bajó a **`0,64 s`**, superando también al Tree-Walk.
 3. **Comparación contra `ploxb` y `plox` de la cátedra:**
-   La VM del TP supera por **4,61x** a `ploxb` y por **6,59x** a `plox` en `large_loop.lox`, y por **3,96x** a `plox` en `fib_recursive.lox`, gracias al cacheo de variables locales en `_execute()`, la ausencia de formateo de strings de debug cuando no se solicita y el acceso directo por índice al `bytearray`.
+   La VM del TP supera por **4,33x** a `ploxb` y por **6,25x** a `plox` en `large_loop.lox`, y por **4,48x** a `plox` en `fib_recursive.lox`, gracias al cacheo de variables locales en `_execute()`, la ausencia de formateo de strings de debug cuando no se solicita y el acceso directo por índice al `bytearray`.
 
 Para reproducir toda la suite de benchmarks y regenerar el gráfico SVG:
 
